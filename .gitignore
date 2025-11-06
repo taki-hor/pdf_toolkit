@@ -1,0 +1,60 @@
+# ===== Python 基礎 =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.sqlite3
+
+# 測試 / 覆蓋率
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 暫存/日誌
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+.cache/
+
+# ===== 虛擬環境與相依快取 =====
+# 你的 venv 內很龐大，務必忽略
+venv/
+.venv/
+env/
+ENV/
+pip-wheel-metadata/
+pip-log.txt
+
+# ===== 專案特有：輸出、樣本檔、截圖等 =====
+# 如果「pictures/」只是放 GUI 問題截圖、不需版本控管就忽略；
+# 若你想把教學截圖放到 repo，可把這行註解掉。
+pictures/
+
+# 若會放測試 PDF/暫存輸出，建議放到這些資料夾並忽略
+output/
+temp/
+tmp/
+samples/
+test_files/
+*.pdf   # 若你會經常放大體積 PDF，建議忽略；要收錄的個別再用 `git add -f` 強制加入
+
+# ===== IDE／工具設定 =====
+.vscode/
+.idea/
+*.code-workspace
+
+# ===== 平台/打包產物（若未來用到） =====
+build/
+dist/
+*.spec
+
+# 排除特定文件/文件夾
+.python-version
+md/
