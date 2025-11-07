@@ -1,6 +1,10 @@
-# PDF Toolkit
+﻿# PDF Toolkit
 
-A comprehensive Python PDF toolkit providing command-line interface integration for merging, splitting, deleting, rotating, watermarking, compression, and information retrieval.
+Basic PDF editing features — merge, split, delete, rotate etc.
+
+## GUI Preview
+
+<img src="pictures/gui.png" alt="PDF Toolkit GUI" width="450">
 
 ## Features
 - ✅ Merge multiple PDF files
@@ -130,4 +134,5 @@ Taki HOR
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
 

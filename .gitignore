@@ -35,7 +35,7 @@ pip-log.txt
 # ===== 專案特有：輸出、樣本檔、截圖等 =====
 # 如果「pictures/」只是放 GUI 問題截圖、不需版本控管就忽略；
 # 若你想把教學截圖放到 repo，可把這行註解掉。
-pictures/
+#pictures/
 
 # 若會放測試 PDF/暫存輸出，建議放到這些資料夾並忽略
 output/
@@ -60,4 +60,4 @@ dist/
 md/
 diagnostic_report.py
 test_gui_integration.py
-.claude
+.config
