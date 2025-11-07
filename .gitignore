@@ -58,3 +58,6 @@ dist/
 # 排除特定文件/文件夾
 .python-version
 md/
+diagnostic_report.py
+test_gui_integration.py
+.claude

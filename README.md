@@ -1,92 +1,133 @@
 # PDF Toolkit
 
-Python PDF 工具箱，提供命令列介面整合的合併、拆分、刪除、旋轉、水印、壓縮與資訊查詢等功能。
+A comprehensive Python PDF toolkit providing command-line interface integration for merging, splitting, deleting, rotating, watermarking, compression, and information retrieval.
 
-## 功能特性
-- ✅ 合併多個 PDF 檔案
-- ✅ 拆分 PDF（單頁或指定範圍）
-- ✅ 刪除指定頁面（反向刪除避免索引錯位）
-- ✅ 旋轉頁面並累加既有角度
-- ✅ 為所有頁面添加自訂文字水印
-- ✅ 使用 pikepdf 進行基礎壓縮，支援線性化
-- ✅ 查詢 PDF 檔案資訊與中繼資料
+## Features
+- ✅ Merge multiple PDF files
+- ✅ Split PDF (single pages or specified ranges)
+- ✅ Delete specific pages (reverse deletion to avoid index misalignment)
+- ✅ Rotate pages with cumulative angle support
+- ✅ Add custom text watermarks to all pages
+- ✅ Basic compression using pikepdf with linearization support
+- ✅ Query PDF file information and metadata
+- ✅ Graphical User Interface (GUI) for easy operation
 
-## 安裝
+## Installation
+
+### Basic Installation (CLI only)
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows 請使用 .venv\Scripts\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 使用方法
+### GUI Installation (Optional)
+```bash
+pip install -r requirements-gui.txt
+```
 
-所有指令皆透過 `python pdf_toolkit.py <子命令> [...]` 呼叫。可使用 `-h` 或 `--help` 檢視完整說明。
+## Usage
 
-### 合併 PDF
+### Command Line Interface (CLI)
+
+All commands are invoked via `python pdf_toolkit.py <subcommand> [...]`. Use `-h` or `--help` to view complete documentation.
+
+#### Merge PDFs
 ```bash
 python pdf_toolkit.py merge input1.pdf input2.pdf input3.pdf -o merged.pdf
 ```
 
-### 拆分 PDF
+#### Split PDF
 ```bash
-# 拆分為單頁
+# Split into single pages
 python pdf_toolkit.py split input.pdf -d output_folder/
 
-# 按範圍拆分
+# Split by range
 python pdf_toolkit.py split input.pdf -d output_folder/ -p "1-10,21-30"
 ```
 
-### 刪除頁面
+#### Delete Pages
 ```bash
 python pdf_toolkit.py delete input.pdf -p "1,3,5-8" -o trimmed.pdf
 ```
 
-### 旋轉頁面
+#### Rotate Pages
 ```bash
 python pdf_toolkit.py rotate input.pdf -p "1-5" -a 90 -o rotated.pdf
 ```
 
-### 添加文字水印
+#### Add Text Watermark
 ```bash
 python pdf_toolkit.py watermark input.pdf -t "CONFIDENTIAL" -o watermarked.pdf
-# 自訂參數
+
+# Custom parameters
 python pdf_toolkit.py watermark input.pdf -t "DRAFT" --size 48 --alpha 0.2 --angle 30 -o draft.pdf
 ```
 
-### 壓縮優化
+#### Compress and Optimize
 ```bash
-# 基礎壓縮（可選線性化）
+# Basic compression (with optional linearization)
 python pdf_toolkit.py optimize input.pdf -o optimized.pdf --linearize
 
-# 進階壓縮旗標（目前以基礎壓縮回退並顯示提醒）
+# Aggressive compression flag (currently falls back to basic compression with reminder)
 python pdf_toolkit.py optimize input.pdf -o optimized_aggressive.pdf --aggressive --dpi 150
 ```
 
-### 查詢 PDF 資訊
+#### View PDF Information
 ```bash
 python pdf_toolkit.py info input.pdf
 ```
 
-## 頁碼語法
-- `1,3,5`：指定單頁
-- `1-5`：連續範圍
-- `10-`：從第 10 頁到最後
-- `1-3,5-7,10-`：混合使用
+### Graphical User Interface (GUI)
 
-所有頁碼均為 1-based；工具會自動去除重複並排序。
+Launch the GUI application:
+```bash
+python pdf_toolkit_gui.py
+```
 
-## 快速驗證（選用）
-專案附帶 `quick_test.py`，可用於批次驗證各功能（需準備測試用 PDF）：
+The GUI provides an intuitive interface for all PDF operations:
+- **Merge**: Combine multiple PDFs with drag-and-drop support
+- **Split**: Split PDFs into individual pages or ranges
+- **Info**: View detailed PDF metadata
+- **Delete**: Remove specific pages
+- **Rotate**: Rotate pages by 90, 180, or 270 degrees
+- **Watermark**: Add customizable text watermarks
+- **Optimize**: Compress PDFs with quality settings
+
+## Page Number Syntax
+
+- `1,3,5`: Individual pages
+- `1-5`: Consecutive range
+- `10-`: From page 10 to the end
+- `1-3,5-7,10-`: Mixed usage
+
+All page numbers are 1-based; the tool automatically removes duplicates and sorts them.
+
+## Quick Validation (Optional)
+
+The project includes `quick_test.py` for batch validation of all features (requires test PDFs):
 ```bash
 python quick_test.py
 ```
 
-## 系統需求
+## System Requirements
+
+### Core Requirements
 - Python 3.8+
 - PyMuPDF (fitz)
 - pikepdf
 - Pillow
 - tqdm
 
-## 授權
-MIT License
+### GUI Requirements (Optional)
+- tkinter (usually included with Python)
+
+
+## Author
+
+Taki HOR
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+

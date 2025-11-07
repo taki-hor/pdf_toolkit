@@ -37,6 +37,23 @@ except ImportError:  # pragma: no cover - handled at runtime
 
 __version__ = "0.1.0"
 
+
+class _NullStream:
+    """Fallback stream used when stdout/stderr are unavailable (e.g., PyInstaller GUI)."""
+
+    def write(self, *_: object, **__: object) -> None:
+        pass
+
+    def flush(self) -> None:
+        pass
+
+
+if getattr(sys, "stdout", None) is None:
+    sys.stdout = _NullStream()  # type: ignore[assignment]
+
+if getattr(sys, "stderr", None) is None:
+    sys.stderr = _NullStream()  # type: ignore[assignment]
+
 # ============= 工具函數區 =============
 
 def parse_page_spec(spec: str, total_pages: int) -> list[int]:
@@ -416,8 +433,21 @@ def delete_pages(input_pdf: str, output_pdf: str, page_spec: str) -> None:
         if remaining_pages == 0:
             print("⚠ 已刪除所有頁面，輸出檔案將為空。")
 
+        save_kwargs = {
+            "garbage": 4,  # remove unused objects so file size reflects deletions
+            "deflate": True,
+            "clean": True,
+            "incremental": False,
+        }
+
         try:
-            document.save(output_pdf)
+            document.save(output_pdf, **save_kwargs)
+        except TypeError:
+            # Older PyMuPDF versions may not support all save args.
+            try:
+                document.save(output_pdf, garbage=4)
+            except OSError as exc:
+                raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
         except OSError as exc:
             raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
     finally:
