@@ -157,6 +157,8 @@ class MainWindow(tk.Tk):
             ("Merge", "Combine multiple PDF files"),
             ("Split", "Split PDF into multiple files"),
             ("Info", "View detailed PDF information"),
+            ("OCR Extract", "Convert scanned PDFs to searchable text"),
+            ("Search", "Search across OCR text index"),
         ]
 
         for name, desc in features:
@@ -225,6 +227,14 @@ class MainWindow(tk.Tk):
             from gui.dialogs.optimize_dialog import OptimizeDialog
             self.current_dialog = OptimizeDialog(self.workspace, self)
             self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        elif feature == "ocr":
+            from gui.dialogs.ocr_dialog import OCRDialog
+            self.current_dialog = OCRDialog(self.workspace, self)
+            self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        elif feature == "search":
+            from gui.dialogs.search_dialog import SearchDialog
+            self.current_dialog = SearchDialog(self.workspace, self)
+            self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
     def _show_coming_soon(self, feature: str) -> None:
         """Show coming soon message for unimplemented features."""
@@ -278,6 +288,8 @@ class MainWindow(tk.Tk):
             "watermark": "Add Watermark",
             "optimize": "Optimize PDF",
             "info": "PDF Info",
+            "ocr": "OCR Extract",
+            "search": "Search OCR Index",
         }
 
         name = feature_names.get(feature, feature)

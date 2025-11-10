@@ -44,6 +44,12 @@ tmp/
 samples/
 test_files/
 *.pdf   # 若你會經常放大體積 PDF，建議忽略；要收錄的個別再用 `git add -f` 強制加入
+core/db/*
+!core/db/.gitkeep
+data/ocr_cache/*
+!data/ocr_cache/.gitkeep
+data/logs/*
+!data/logs/.gitkeep
 
 # ===== IDE／工具設定 =====
 .vscode/

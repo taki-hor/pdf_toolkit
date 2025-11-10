@@ -1,6 +1,6 @@
 # =============================================================================
 # PDF Toolkit
-# Version: 0.1.0
+# Version: 0.2.0
 # Description: Command-line utility toolkit for common PDF manipulations.
 # =============================================================================
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import sys
 from contextlib import ExitStack
 from pathlib import Path
@@ -35,7 +36,7 @@ except ImportError:  # pragma: no cover - handled at runtime
     Image = None
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 class _NullStream:
@@ -657,6 +658,96 @@ def print_pdf_info(input_pdf: str) -> None:
     print(f"修改日期: {info['mod_date']}")
 
 
+def ocr_extract_folder(
+    folder: str,
+    *,
+    lang: str | None = None,
+    dpi: int = 300,
+    recursive: bool = False,
+    force: bool = False,
+    use_cache: bool = True,
+    use_ocrmypdf: bool = False,
+) -> dict:
+    """Batch OCR a folder of PDFs and return statistics."""
+
+    from core import PDFOCRExtractor
+
+    extractor = PDFOCRExtractor()
+    summary = extractor.batch_ocr_folder(
+        folder,
+        lang=lang,
+        dpi=dpi,
+        recursive=recursive,
+        force=force,
+        use_cache=use_cache,
+        use_ocrmypdf=use_ocrmypdf,
+    )
+    return summary
+
+
+def search_ocr_index(
+    keyword: str,
+    *,
+    limit: int = 20,
+    context_chars: int = 80,
+) -> list[dict[str, object]]:
+    """Search the OCR SQLite index for a keyword."""
+
+    from core import PDFOCRExtractor
+
+    extractor = PDFOCRExtractor()
+    results = extractor.search_keyword(
+        keyword,
+        limit=limit,
+        context_chars=context_chars,
+    )
+    return [
+        {
+            "file_path": str(item.file_path),
+            "page": item.page,
+            "snippet": item.snippet,
+            "keyword": item.keyword,
+            "score": item.score,
+        }
+        for item in results
+    ]
+
+
+def export_ocr_index(output_path: str | Path) -> Path:
+    """Export the OCR index to a JSON file."""
+
+    from core import PDFOCRExtractor
+
+    extractor = PDFOCRExtractor()
+    return extractor.export_index(output_path)
+
+
+def _print_ocr_summary(summary: dict) -> None:
+    """Print OCR extraction summary to stdout."""
+
+    folder = summary.get("folder", "")
+    total = summary.get("total", 0)
+    indexed = summary.get("indexed", 0)
+    updated = summary.get("updated", 0)
+    skipped = summary.get("skipped", 0)
+    duration = summary.get("duration", 0.0)
+
+    if folder:
+        print(f"📂 資料夾：{folder}")
+    print(f"📄 偵測到 {total} 份 PDF")
+    print(f"✅ 已建立索引：{indexed}（更新 {updated}）")
+    print(f"⏭ 略過：{skipped}")
+    print(f"⏱ 耗時：約 {duration:.2f} 秒")
+
+    errors = summary.get("errors") or []
+    if errors:
+        print("⚠ 發生錯誤：")
+        for item in errors:
+            file_path = item.get("file", "未知檔案")
+            message = item.get("error", "")
+            print(f"   - {file_path}: {message}")
+
+
 # ============= 壓縮優化區 =============
 
 
@@ -921,6 +1012,37 @@ def build_parser() -> "argparse.ArgumentParser":
     info_parser = subparsers.add_parser("info", help="查詢 PDF 資訊")
     info_parser.add_argument("input", help="輸入 PDF 檔案")
 
+    ocr_parser = subparsers.add_parser("ocr-extract", help="對資料夾進行 OCR 並建立索引")
+    ocr_parser.add_argument("--folder", required=True, help="要處理的 PDF 資料夾")
+    ocr_parser.add_argument("--lang", default="chi_tra+eng", help="OCR 語言 (預設 chi_tra+eng)")
+    ocr_parser.add_argument("--dpi", type=int, default=300, help="轉圖 DPI (預設 300)")
+    ocr_parser.add_argument("--recursive", action="store_true", help="包含子資料夾")
+    ocr_parser.add_argument("--force", action="store_true", help="無視快取重新 OCR")
+    ocr_parser.add_argument("--no-cache", action="store_true", help="不使用 OCR 快取")
+    ocr_parser.add_argument(
+        "--use-ocrmypdf",
+        action="store_true",
+        help="改用 ocrmypdf 進行 OCR (需要額外依賴)",
+    )
+
+    search_parser = subparsers.add_parser("search-text", help="搜尋 OCR 索引內容")
+    search_parser.add_argument("--keyword", required=True, help="要搜尋的關鍵字")
+    search_parser.add_argument("--limit", type=int, default=20, help="結果筆數上限 (預設 20)")
+    search_parser.add_argument(
+        "--context",
+        type=int,
+        default=80,
+        help="前後文顯示字數 (預設 80)",
+    )
+    search_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="以 JSON 格式輸出結果",
+    )
+
+    export_parser = subparsers.add_parser("ocr-export", help="匯出 OCR 索引為 JSON")
+    export_parser.add_argument("--output", required=True, help="輸出 JSON 路徑")
+
     return parser
 
 
@@ -957,6 +1079,38 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
         elif args.command == "info":
             print_pdf_info(args.input)
+        elif args.command == "ocr-extract":
+            summary = ocr_extract_folder(
+                args.folder,
+                lang=args.lang,
+                dpi=args.dpi,
+                recursive=args.recursive,
+                force=args.force,
+                use_cache=not args.no_cache,
+                use_ocrmypdf=args.use_ocrmypdf,
+            )
+            _print_ocr_summary(summary)
+        elif args.command == "search-text":
+            results = search_ocr_index(
+                args.keyword,
+                limit=args.limit,
+                context_chars=args.context,
+            )
+            if args.json:
+                print(json.dumps(results, ensure_ascii=False, indent=2))
+            elif not results:
+                print("❌ 找不到匹配內容")
+            else:
+                print(f"🔎 找到 {len(results)} 筆結果：\n")
+                for item in results:
+                    file_path = item.get("file_path", "")
+                    page = item.get("page", "?")
+                    snippet = str(item.get("snippet", "")).strip()
+                    print(f"📄 {file_path} (第 {page} 頁)")
+                    print(f"...{snippet}...\n")
+        elif args.command == "ocr-export":
+            exported = export_ocr_index(args.output)
+            print(f"✅ 索引已匯出：{exported}")
         else:  # pragma: no cover - subparser enforces valid commands
             parser.print_help()
     except FileNotFoundError as err:
