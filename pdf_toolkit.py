@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import sys
 from contextlib import ExitStack
 from pathlib import Path
-from typing import List, Sequence
+from typing import Any, Dict, List, Sequence
 
 try:
     import fitz  # type: ignore[import-not-found]
@@ -35,7 +36,7 @@ except ImportError:  # pragma: no cover - handled at runtime
     Image = None
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 class _NullStream:
@@ -183,6 +184,207 @@ def safe_open_pdf(filepath: str, password: str | None = None):
         raise ValueError(f"無法開啟 PDF 檔案：{filepath}") from exc
 
     return document
+
+
+def _ensure_fitz_available() -> None:
+    """Raise an informative error when PyMuPDF is unavailable."""
+
+    if fitz is None:
+        raise ImportError(
+            "PyMuPDF (fitz) 尚未安裝，請先執行 'pip install PyMuPDF>=1.23.0' 後再試。"
+        )
+
+
+def _field_type_name(field_type: int) -> str:
+    """Return a human-friendly widget type name."""
+
+    if fitz is None:
+        return "未知"
+
+    type_names = {
+        fitz.PDF_WIDGET_TYPE_TEXT: "文字",
+        fitz.PDF_WIDGET_TYPE_CHECKBOX: "核取方塊",
+        fitz.PDF_WIDGET_TYPE_COMBOBOX: "下拉選單",
+        fitz.PDF_WIDGET_TYPE_LISTBOX: "列表",
+        fitz.PDF_WIDGET_TYPE_RADIOBUTTON: "單選按鈕",
+        fitz.PDF_WIDGET_TYPE_BUTTON: "按鈕",
+        fitz.PDF_WIDGET_TYPE_SIGNATURE: "簽名",
+    }
+
+    return type_names.get(field_type, f"未知類型 ({field_type})")
+
+
+def _normalize_checkbox_value(widget, value: Any) -> str:
+    """Return a proper checkbox state string based on the provided value."""
+
+    truthy = {"1", "true", "yes", "y", "on", "checked"}
+
+    should_check: bool
+    if isinstance(value, bool):
+        should_check = value
+    elif isinstance(value, (int, float)):
+        should_check = value != 0
+    elif isinstance(value, str):
+        should_check = value.strip().lower() in truthy
+    else:
+        should_check = bool(value)
+
+    on_state = getattr(widget, "button_on_state", None) or getattr(
+        widget, "on_state_name", None
+    )
+
+    if not on_state:
+        on_state = "Yes"
+
+    return on_state if should_check else "Off"
+
+
+def _load_json_data(filepath: str | None) -> dict[str, Any]:
+    """Load key/value mappings from a JSON file if provided."""
+
+    if not filepath:
+        return {}
+
+    path = Path(filepath)
+    if not path.is_file():
+        raise FileNotFoundError(f"找不到資料檔案：{path.resolve()}")
+
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"JSON 解析失敗：{filepath}") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError("資料檔案內容必須為物件（鍵值對）。")
+
+    return data
+
+
+def _parse_key_value_pairs(pairs: Sequence[str] | None) -> dict[str, Any]:
+    """Parse a list of KEY=VALUE strings into a dictionary."""
+
+    if not pairs:
+        return {}
+
+    parsed: dict[str, Any] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(f"資料參數必須為 key=value 格式：'{pair}'")
+        key, value = pair.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"資料鍵不得為空值：'{pair}'")
+        parsed[key] = value.strip()
+
+    return parsed
+
+
+def extract_pdf_form_fields(pdf_path: str) -> list[dict[str, Any]]:
+    """Return metadata for all interactive form fields inside a PDF document."""
+
+    _ensure_fitz_available()
+
+    with ExitStack() as stack:
+        doc = safe_open_pdf(pdf_path)
+        stack.callback(doc.close)
+        fields: list[dict[str, Any]] = []
+
+        for page_index, page in enumerate(doc, start=1):
+            widgets = page.widgets() or []
+            for widget in widgets:
+                name = widget.field_name or ""
+                if not name:
+                    continue
+
+                field_info: dict[str, Any] = {
+                    "name": name,
+                    "type": _field_type_name(widget.field_type),
+                    "page": page_index,
+                    "value": widget.field_value,
+                }
+
+                options = getattr(widget, "choice_values", None)
+                if options:
+                    field_info["options"] = list(options)
+
+                fields.append(field_info)
+
+        return fields
+
+
+def fill_pdf_form(
+    template_path: str,
+    output_path: str,
+    data: Dict[str, Any],
+    *,
+    flatten: bool = False,
+) -> dict[str, Any]:
+    """Fill a PDF form using provided data and save the result."""
+
+    _ensure_fitz_available()
+
+    if not data:
+        raise ValueError("未提供任何填寫資料。請使用 --data 或 --value 指定欄位內容。")
+
+    output_file = Path(output_path)
+    if output_file.exists() and output_file.is_dir():
+        raise IsADirectoryError(f"輸出路徑為資料夾：{output_file}")
+
+    filled_fields: dict[str, Any] = {}
+
+    with ExitStack() as stack:
+        doc = safe_open_pdf(template_path)
+        stack.callback(doc.close)
+
+        for page in doc:
+            widgets = page.widgets() or []
+            for widget in widgets:
+                field_name = widget.field_name
+                if not field_name or field_name not in data:
+                    continue
+
+                value = data[field_name]
+                try:
+                    if widget.field_type == fitz.PDF_WIDGET_TYPE_TEXT:
+                        widget.field_value = "" if value is None else str(value)
+                    elif widget.field_type == fitz.PDF_WIDGET_TYPE_CHECKBOX:
+                        widget.field_value = _normalize_checkbox_value(widget, value)
+                    elif widget.field_type in (
+                        fitz.PDF_WIDGET_TYPE_COMBOBOX,
+                        fitz.PDF_WIDGET_TYPE_LISTBOX,
+                    ):
+                        widget.field_value = "" if value is None else str(value)
+                    elif widget.field_type == fitz.PDF_WIDGET_TYPE_RADIOBUTTON:
+                        widget.field_value = "" if value is None else str(value)
+                    else:
+                        widget.field_value = "" if value is None else str(value)
+
+                    widget.update()
+                    filled_fields[field_name] = value
+                except Exception as exc:
+                    raise ValueError(
+                        f"欄位 '{field_name}' 無法填寫，請確認提供的資料是否符合欄位型別。"
+                    ) from exc
+
+        if not filled_fields:
+            raise ValueError("提供的資料沒有對應到任何表單欄位。")
+
+        save_kwargs: dict[str, Any] = {"deflate": 1, "incremental": 0}
+        if flatten:
+            save_kwargs["appearance"] = 1
+            save_kwargs["clean"] = 1
+
+        output_parent = output_file.parent
+        if output_parent and not output_parent.exists():
+            output_parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            doc.save(output_file, **save_kwargs)
+        except OSError as exc:  # pragma: no cover - depends on filesystem
+            raise OSError(f"無法寫入輸出檔案：{output_file}") from exc
+
+    return filled_fields
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -921,6 +1123,29 @@ def build_parser() -> "argparse.ArgumentParser":
     info_parser = subparsers.add_parser("info", help="查詢 PDF 資訊")
     info_parser.add_argument("input", help="輸入 PDF 檔案")
 
+    autofill_parser = subparsers.add_parser("autofill", help="自動填寫 PDF 表單")
+    autofill_parser.add_argument("template", help="PDF 範本檔案")
+    autofill_parser.add_argument("-o", "--output", help="輸出 PDF 檔案")
+    autofill_parser.add_argument("-d", "--data", help="JSON 資料檔案路徑")
+    autofill_parser.add_argument(
+        "-v",
+        "--value",
+        action="append",
+        dest="values",
+        metavar="KEY=VALUE",
+        help="直接指定欄位值，可重複使用（格式：key=value）",
+    )
+    autofill_parser.add_argument(
+        "--list-fields",
+        action="store_true",
+        help="列出 PDF 中可填寫的表單欄位",
+    )
+    autofill_parser.add_argument(
+        "--flatten",
+        action="store_true",
+        help="填寫完成後將表單欄位壓平成一般文字",
+    )
+
     return parser
 
 
@@ -957,6 +1182,39 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
         elif args.command == "info":
             print_pdf_info(args.input)
+        elif args.command == "autofill":
+            if not args.list_fields and not args.output:
+                raise ValueError("請指定輸出檔案 (--output) 或使用 --list-fields 查看欄位。")
+
+            if args.list_fields:
+                fields = extract_pdf_form_fields(args.template)
+                if not fields:
+                    print("⚠ 未偵測到任何可填寫的表單欄位。")
+                else:
+                    print("📋 表單欄位清單：")
+                    for field in fields:
+                        base = f"  • {field['name']} ({field['type']}) - 第 {field['page']} 頁"
+                        value = field.get("value")
+                        if value not in (None, ""):
+                            base += f"，目前值：{value}"
+                        print(base)
+                        options = field.get("options")
+                        if options:
+                            print(f"      選項：{', '.join(map(str, options))}")
+
+            if args.output:
+                payload: dict[str, Any] = {}
+                payload.update(_load_json_data(args.data))
+                payload.update(_parse_key_value_pairs(args.values))
+                filled = fill_pdf_form(
+                    args.template,
+                    args.output,
+                    payload,
+                    flatten=args.flatten,
+                )
+                print(
+                    f"✓ 已填寫 {len(filled)} 個欄位，輸出檔案：{Path(args.output).resolve()}"
+                )
         else:  # pragma: no cover - subparser enforces valid commands
             parser.print_help()
     except FileNotFoundError as err:

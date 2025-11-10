@@ -15,6 +15,7 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ Basic compression using pikepdf with linearization support
 - ✅ Query PDF file information and metadata
 - ✅ Graphical User Interface (GUI) for easy operation
+- ✅ Autofill interactive PDF forms from JSON or inline data
 
 ## Installation
 
@@ -80,6 +81,21 @@ python pdf_toolkit.py optimize input.pdf -o optimized_aggressive.pdf --aggressiv
 #### View PDF Information
 ```bash
 python pdf_toolkit.py info input.pdf
+```
+
+#### Autofill PDF Form Fields
+```bash
+# Inspect available form fields
+python pdf_toolkit.py autofill form.pdf --list-fields
+
+# Fill fields using a JSON payload (keys must match field names)
+python pdf_toolkit.py autofill form.pdf -d data.json -o filled.pdf
+
+# Override / add individual values on the command line
+python pdf_toolkit.py autofill form.pdf -d data.json -v employee_id=EMP-001 -o filled.pdf
+
+# Fill and flatten the result into static text
+python pdf_toolkit.py autofill form.pdf -d data.json -o filled_flat.pdf --flatten
 ```
 
 ### Graphical User Interface (GUI)
