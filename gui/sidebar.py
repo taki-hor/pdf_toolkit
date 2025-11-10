@@ -18,6 +18,8 @@ class Sidebar(tk.Frame):
         ("merge", "Merge", "Merge multiple PDF files"),
         ("split", "Split", "Split PDF into multiple files"),
         ("info", "Info", "View PDF information"),
+        ("template_fill", "Template Fill", "Fill DOCX/PDF templates"),
+        ("pdf_diff", "PDF Diff", "Compare two PDF versions"),
         None,  # Separator
         ("delete", "Delete", "Delete specific pages"),
         ("rotate", "Rotate", "Rotate page orientation"),
