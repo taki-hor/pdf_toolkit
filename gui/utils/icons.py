@@ -12,6 +12,8 @@ ICONS = {
     "watermark": "(C)",
     "optimize": "*",
     "info": "i",
+    "template_fill": "TF",
+    "pdf_diff": "DI",
 
     # Actions
     "file": "*",

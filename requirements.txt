@@ -2,3 +2,6 @@ PyMuPDF>=1.23.0
 pikepdf>=8.0.0
 Pillow>=10.0.0
 tqdm>=4.65.0
+click>=8.0.0
+python-docx>=0.8.11
+pdfplumber>=0.10.0

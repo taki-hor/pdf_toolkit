@@ -156,6 +156,8 @@ class MainWindow(tk.Tk):
         features = [
             ("Merge", "Combine multiple PDF files"),
             ("Split", "Split PDF into multiple files"),
+            ("Template Fill", "Fill DOCX/PDF templates with data"),
+            ("PDF Diff", "Compare two PDF versions"),
             ("Info", "View detailed PDF information"),
         ]
 
@@ -204,6 +206,18 @@ class MainWindow(tk.Tk):
         elif feature == "info":
             from gui.dialogs.info_dialog import InfoDialog
             self.current_dialog = InfoDialog(self.workspace, self)
+            self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        elif feature == "template_fill":
+            from gui.template_filler_dialog import TemplateFillerDialog
+
+            self.current_dialog = TemplateFillerDialog(self.workspace, self)
+            self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        elif feature == "pdf_diff":
+            from gui.pdf_diff_dialog import PDFDiffDialog
+
+            self.current_dialog = PDFDiffDialog(self.workspace, self)
             self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         elif feature == "delete":
@@ -278,6 +292,8 @@ class MainWindow(tk.Tk):
             "watermark": "Add Watermark",
             "optimize": "Optimize PDF",
             "info": "PDF Info",
+            "template_fill": "Template Fill",
+            "pdf_diff": "PDF Diff",
         }
 
         name = feature_names.get(feature, feature)
