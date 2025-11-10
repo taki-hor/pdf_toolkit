@@ -23,6 +23,9 @@ class Sidebar(tk.Frame):
         ("rotate", "Rotate", "Rotate page orientation"),
         ("watermark", "Watermark", "Add text watermark"),
         ("optimize", "Optimize", "Compress and optimize PDF"),
+        None,
+        ("ocr", "OCR Extract", "Run OCR and build searchable index"),
+        ("search", "Search", "Search within OCR index"),
     ]
 
     def __init__(self, parent, on_feature_select: Callable[[str], None]):

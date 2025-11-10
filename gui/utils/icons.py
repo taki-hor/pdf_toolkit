@@ -11,6 +11,8 @@ ICONS = {
     "rotate": "@",
     "watermark": "(C)",
     "optimize": "*",
+    "ocr": "OC",
+    "search": "?",
     "info": "i",
 
     # Actions

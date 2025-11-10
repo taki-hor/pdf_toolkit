@@ -15,6 +15,7 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ Basic compression using pikepdf with linearization support
 - ✅ Query PDF file information and metadata
 - ✅ Graphical User Interface (GUI) for easy operation
+- ✅ OCR extraction for scanned PDFs with searchable index support
 
 ## Installation
 
@@ -82,6 +83,29 @@ python pdf_toolkit.py optimize input.pdf -o optimized_aggressive.pdf --aggressiv
 python pdf_toolkit.py info input.pdf
 ```
 
+#### OCR Extract and Index
+```bash
+# Run OCR on all PDFs inside ./scans and build SQLite index
+python pdf_toolkit.py ocr-extract --folder ./scans --lang chi_tra+eng
+
+# Include subdirectories and force re-indexing
+python pdf_toolkit.py ocr-extract --folder ./archive --recursive --force
+```
+
+#### Search OCR Index
+```bash
+# Search for keyword across indexed OCR text
+python pdf_toolkit.py search-text --keyword "報價單"
+
+# Output results as JSON with more context
+python pdf_toolkit.py search-text --keyword "Invoice" --context 120 --json
+```
+
+#### Export OCR Index
+```bash
+python pdf_toolkit.py ocr-export --output ./data/index_export.json
+```
+
 ### Graphical User Interface (GUI)
 
 Launch the GUI application:
@@ -97,6 +121,8 @@ The GUI provides an intuitive interface for all PDF operations:
 - **Rotate**: Rotate pages by 90, 180, or 270 degrees
 - **Watermark**: Add customizable text watermarks
 - **Optimize**: Compress PDFs with quality settings
+- **OCR Extract**: Batch OCR scanned PDFs and build a searchable index
+- **Search**: Query OCR results directly from the built-in index
 
 ## Page Number Syntax
 
@@ -122,6 +148,9 @@ python quick_test.py
 - pikepdf
 - Pillow
 - tqdm
+- pytesseract (requires Tesseract OCR runtime)
+- ocrmypdf (optional alternative OCR engine)
+- sqlite-utils
 
 ### GUI Requirements (Optional)
 - tkinter (usually included with Python)
