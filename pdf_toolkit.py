@@ -35,6 +35,11 @@ try:
 except ImportError:  # pragma: no cover - handled at runtime
     Image = None
 
+try:
+    import subprocess
+except ImportError:  # pragma: no cover - subprocess is standard library
+    subprocess = None
+
 
 __version__ = "0.2.0"
 
@@ -859,6 +864,259 @@ def print_pdf_info(input_pdf: str) -> None:
     print(f"修改日期: {info['mod_date']}")
 
 
+def edit_pdf_metadata(
+    input_pdf: str,
+    output_pdf: str,
+    metadata: dict[str, Any],
+) -> None:
+    """
+    Edit PDF metadata (title, author, subject, keywords, etc.).
+
+    Args:
+        input_pdf: Source PDF path.
+        output_pdf: Destination PDF path.
+        metadata: Dictionary with metadata key-value pairs.
+
+    Raises:
+        ImportError: If PyMuPDF is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the input PDF is encrypted.
+        ValueError: If the PDF cannot be read.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法編輯 PDF 元資料。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法編輯元資料：{input_pdf}") from exc
+
+    try:
+        # Map common metadata keys to PDF metadata keys
+        key_mapping = {
+            "title": "title",
+            "author": "author",
+            "subject": "subject",
+            "keywords": "keywords",
+            "creator": "creator",
+            "producer": "producer",
+        }
+
+        current_metadata = document.metadata or {}
+        updated_count = 0
+
+        for key, value in metadata.items():
+            key_lower = key.lower()
+            if key_lower in key_mapping:
+                pdf_key = key_mapping[key_lower]
+                current_metadata[pdf_key] = str(value)
+                updated_count += 1
+
+        document.set_metadata(current_metadata)
+
+        try:
+            document.save(output_pdf)
+        except OSError as exc:
+            raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
+
+        print(f"✓ 已更新 {updated_count} 個元資料欄位")
+    finally:
+        document.close()
+
+
+def compare_pdfs(
+    pdf1: str,
+    pdf2: str,
+    output_report: str | None = None,
+    format_type: str = "summary",
+) -> None:
+    """
+    Compare two PDF files and show differences.
+
+    Args:
+        pdf1: First PDF path.
+        pdf2: Second PDF path.
+        output_report: Optional output path for HTML report.
+        format_type: Output format - 'summary' for console or 'html' for report.
+
+    Raises:
+        ImportError: If required libraries are not installed.
+        FileNotFoundError: If any input PDF does not exist.
+        ValueError: If the format type is invalid.
+    """
+    try:
+        from core.pdf_diff_tool import PDFDiffTool
+    except ImportError as exc:
+        raise ImportError("無法載入 PDF 比較工具。") from exc
+
+    check_file_exists(pdf1)
+    check_file_exists(pdf2)
+
+    print(f"比較 PDF 文件...")
+    print(f"  來源 1: {Path(pdf1).name}")
+    print(f"  來源 2: {Path(pdf2).name}")
+
+    tool = PDFDiffTool()
+    result = tool.compare_pdfs(pdf1, pdf2)
+
+    if format_type == "html":
+        if not output_report:
+            output_report = "pdf_diff_report.html"
+        report_path = tool.generate_html_report(result, output_report)
+        print(f"✓ 已產生 HTML 報告：{report_path.resolve()}")
+    else:
+        print("\n比較結果")
+        print("========")
+        print(f"相似度: {result.similarity:.2f}%")
+        print(f"新增行數: {len(result.added)}")
+        print(f"刪除行數: {len(result.deleted)}")
+        print(f"修改行數: {len(result.modified)}")
+
+        if result.key_changes:
+            print("\n重要變更:")
+            for category, changes in result.key_changes.items():
+                print(f"\n  {category.title()}:")
+                for change in changes:
+                    print(f"    - {change}")
+
+        if result.added and len(result.added) <= 10:
+            print("\n新增的內容:")
+            for line in result.added[:10]:
+                print(f"  + {line}")
+
+        if result.deleted and len(result.deleted) <= 10:
+            print("\n刪除的內容:")
+            for line in result.deleted[:10]:
+                print(f"  - {line}")
+
+        if len(result.added) > 10 or len(result.deleted) > 10:
+            print(f"\n提示：使用 --format html 產生完整報告")
+
+
+def fill_docx_template(
+    template_path: str,
+    output_path: str,
+    data: dict[str, Any],
+    convert_to_pdf: bool = False,
+) -> None:
+    """
+    Fill a DOCX template with data and optionally convert to PDF.
+
+    Args:
+        template_path: Path to the DOCX template file.
+        output_path: Path for the output file.
+        data: Dictionary with placeholder values.
+        convert_to_pdf: Whether to convert the output to PDF.
+
+    Raises:
+        ImportError: If required libraries are not installed.
+        FileNotFoundError: If the template does not exist.
+        ValueError: If the template or data is invalid.
+    """
+    try:
+        from core.template_filler import TemplateFiller
+    except ImportError as exc:
+        raise ImportError("無法載入範本填寫工具。") from exc
+
+    check_file_exists(template_path)
+
+    if not data:
+        raise ValueError("未提供任何填寫資料。請使用 --data 或 --value 指定欄位內容。")
+
+    print(f"填寫 DOCX 範本...")
+
+    filler = TemplateFiller()
+    result_path = filler.fill_docx_template(template_path, data)
+
+    # Move to desired output location
+    import shutil
+    final_path = Path(output_path)
+
+    if convert_to_pdf:
+        if not final_path.suffix.lower() == ".pdf":
+            final_path = final_path.with_suffix(".pdf")
+
+        print(f"轉換為 PDF...")
+        try:
+            convert_docx_to_pdf(str(result_path), str(final_path))
+            result_path.unlink()  # Remove intermediate DOCX
+        except Exception as exc:
+            # If conversion fails, keep the DOCX
+            final_path = final_path.with_suffix(".docx")
+            shutil.move(str(result_path), str(final_path))
+            print(f"⚠ PDF 轉換失敗，已保留 DOCX 檔案：{exc}")
+    else:
+        if not final_path.suffix.lower() == ".docx":
+            final_path = final_path.with_suffix(".docx")
+        shutil.move(str(result_path), str(final_path))
+
+    print(f"✓ 已填寫範本並儲存至：{final_path.resolve()}")
+
+
+def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> None:
+    """
+    Convert a DOCX file to PDF using LibreOffice or other converters.
+
+    Args:
+        docx_path: Path to the DOCX file.
+        pdf_path: Path for the output PDF file.
+
+    Raises:
+        FileNotFoundError: If the DOCX file does not exist.
+        RuntimeError: If conversion fails or no converter is available.
+    """
+    check_file_exists(docx_path)
+
+    docx_file = Path(docx_path)
+    pdf_file = Path(pdf_path)
+
+    # Try docx2pdf first (if available)
+    try:
+        import docx2pdf
+        docx2pdf.convert(str(docx_file), str(pdf_file))
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        print(f"⚠ docx2pdf 轉換失敗：{exc}")
+
+    # Try LibreOffice
+    if subprocess:
+        try:
+            # Check if libreoffice is available
+            result = subprocess.run(
+                ["libreoffice", "--version"],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                output_dir = pdf_file.parent
+                subprocess.run(
+                    [
+                        "libreoffice",
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        str(output_dir),
+                        str(docx_file),
+                    ],
+                    check=True,
+                    timeout=60,
+                )
+                # LibreOffice creates file with same name as input
+                generated_pdf = output_dir / docx_file.with_suffix(".pdf").name
+                if generated_pdf != pdf_file and generated_pdf.exists():
+                    generated_pdf.rename(pdf_file)
+                return
+        except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    raise RuntimeError(
+        "無法轉換 DOCX 到 PDF。請安裝 'pip install docx2pdf' 或 LibreOffice。"
+    )
+
+
 # ============= 壓縮優化區 =============
 
 
@@ -1063,9 +1321,6 @@ def optimize_pdf(
         f"（節省 {saved_ratio:.1f}%）"
     )
 
-    if aggressive:
-        print("⚠ 簡化版進階壓縮已執行基礎壓縮，圖片重採樣功能待後續補強。")
-
 
 def build_parser() -> "argparse.ArgumentParser":
     """Construct the CLI argument parser."""
@@ -1146,6 +1401,48 @@ def build_parser() -> "argparse.ArgumentParser":
         help="填寫完成後將表單欄位壓平成一般文字",
     )
 
+    diff_parser = subparsers.add_parser("diff", help="比較兩個 PDF 檔案的差異")
+    diff_parser.add_argument("pdf1", help="第一個 PDF 檔案")
+    diff_parser.add_argument("pdf2", help="第二個 PDF 檔案")
+    diff_parser.add_argument("-o", "--output", help="輸出 HTML 報告檔案路徑")
+    diff_parser.add_argument(
+        "--format",
+        choices=["summary", "html"],
+        default="summary",
+        help="輸出格式：summary（終端摘要）或 html（完整報告）",
+    )
+
+    template_fill_parser = subparsers.add_parser("template-fill", help="填寫 DOCX 範本")
+    template_fill_parser.add_argument("template", help="DOCX 範本檔案")
+    template_fill_parser.add_argument("-o", "--output", required=True, help="輸出檔案路徑")
+    template_fill_parser.add_argument("-d", "--data", help="JSON 資料檔案路徑")
+    template_fill_parser.add_argument(
+        "-v",
+        "--value",
+        action="append",
+        dest="values",
+        metavar="KEY=VALUE",
+        help="直接指定欄位值，可重複使用（格式：key=value）",
+    )
+    template_fill_parser.add_argument(
+        "--to-pdf",
+        action="store_true",
+        help="將輸出轉換為 PDF（需要 LibreOffice 或 docx2pdf）",
+    )
+
+    edit_metadata_parser = subparsers.add_parser("edit-metadata", help="編輯 PDF 元資料")
+    edit_metadata_parser.add_argument("input", help="輸入 PDF 檔案")
+    edit_metadata_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
+    edit_metadata_parser.add_argument("-d", "--data", help="JSON 資料檔案路徑")
+    edit_metadata_parser.add_argument(
+        "-v",
+        "--value",
+        action="append",
+        dest="values",
+        metavar="KEY=VALUE",
+        help="直接指定元資料值（格式：key=value，支援 title、author、subject、keywords、creator、producer）",
+    )
+
     return parser
 
 
@@ -1215,6 +1512,30 @@ def main(argv: Sequence[str] | None = None) -> None:
                 print(
                     f"✓ 已填寫 {len(filled)} 個欄位，輸出檔案：{Path(args.output).resolve()}"
                 )
+        elif args.command == "diff":
+            compare_pdfs(
+                args.pdf1,
+                args.pdf2,
+                output_report=args.output,
+                format_type=args.format,
+            )
+        elif args.command == "template-fill":
+            payload: dict[str, Any] = {}
+            payload.update(_load_json_data(args.data))
+            payload.update(_parse_key_value_pairs(args.values))
+            fill_docx_template(
+                args.template,
+                args.output,
+                payload,
+                convert_to_pdf=args.to_pdf,
+            )
+        elif args.command == "edit-metadata":
+            metadata: dict[str, Any] = {}
+            metadata.update(_load_json_data(args.data))
+            metadata.update(_parse_key_value_pairs(args.values))
+            if not metadata:
+                raise ValueError("請提供至少一個元資料欄位（使用 --data 或 --value）。")
+            edit_pdf_metadata(args.input, args.output, metadata)
         else:  # pragma: no cover - subparser enforces valid commands
             parser.print_help()
     except FileNotFoundError as err:
