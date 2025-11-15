@@ -16,6 +16,13 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ Query PDF file information and metadata
 - ✅ Graphical User Interface (GUI) for easy operation
 - ✅ Autofill interactive PDF forms from JSON or inline data
+- ✅ Extract text from PDF to text file
+- ✅ Encrypt PDF with password protection (AES-256)
+- ✅ Decrypt password-protected PDFs
+- ✅ Extract images from PDF pages
+- ✅ Convert PDF pages to image files (PNG/JPG)
+- ✅ Reorder PDF pages in custom sequence
+- ✅ Add page numbers with customizable positioning
 
 ## Installation
 
@@ -96,6 +103,71 @@ python pdf_toolkit.py autofill form.pdf -d data.json -v employee_id=EMP-001 -o f
 
 # Fill and flatten the result into static text
 python pdf_toolkit.py autofill form.pdf -d data.json -o filled_flat.pdf --flatten
+```
+
+#### Extract Text from PDF
+```bash
+# Extract text from all pages to console
+python pdf_toolkit.py extract-text input.pdf
+
+# Extract text to a file
+python pdf_toolkit.py extract-text input.pdf -o output.txt
+
+# Extract text from specific pages
+python pdf_toolkit.py extract-text input.pdf -p "1-5,10" -o output.txt
+```
+
+#### Encrypt PDF
+```bash
+# Encrypt with user password
+python pdf_toolkit.py encrypt input.pdf -o encrypted.pdf -u mypassword
+
+# Encrypt with both user and owner passwords
+python pdf_toolkit.py encrypt input.pdf -o encrypted.pdf -u userpass --owner-password ownerpass
+```
+
+#### Decrypt PDF
+```bash
+python pdf_toolkit.py decrypt encrypted.pdf -o decrypted.pdf -p mypassword
+```
+
+#### Extract Images from PDF
+```bash
+# Extract all images
+python pdf_toolkit.py extract-images input.pdf -d output_images/
+
+# Extract images from specific pages
+python pdf_toolkit.py extract-images input.pdf -d output_images/ -p "1-3,5"
+```
+
+#### Convert PDF Pages to Images
+```bash
+# Convert all pages to PNG at 300 DPI
+python pdf_toolkit.py pdf-to-images input.pdf -d output_images/
+
+# Convert specific pages to JPG at custom DPI
+python pdf_toolkit.py pdf-to-images input.pdf -d output_images/ -p "1-5" --dpi 150 --format jpg
+```
+
+#### Reorder PDF Pages
+```bash
+# Reorder pages in custom sequence
+python pdf_toolkit.py reorder input.pdf -o reordered.pdf -p "3,1,2,4-6"
+
+# Reverse page order (for a 5-page document)
+python pdf_toolkit.py reorder input.pdf -o reversed.pdf -p "5,4,3,2,1"
+```
+
+#### Add Page Numbers
+```bash
+# Add page numbers at bottom-right (default)
+python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf
+
+# Add page numbers at top-center with custom format
+python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf --position top-center --format "Page {page}"
+
+# Customize size and offset
+python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf --size 12 --offset 30
 ```
 
 ### Graphical User Interface (GUI)

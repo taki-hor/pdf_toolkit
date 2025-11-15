@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover - handled at runtime
     Image = None
 
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 class _NullStream:
@@ -859,6 +859,425 @@ def print_pdf_info(input_pdf: str) -> None:
     print(f"修改日期: {info['mod_date']}")
 
 
+# ============= 文字提取區 =============
+
+def extract_text(input_pdf: str, output_txt: str | None = None, page_spec: str | None = None) -> str:
+    """
+    Extract text content from a PDF file.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_txt: Optional output text file path.
+        page_spec: Optional page specification string for selective extraction.
+
+    Returns:
+        Extracted text content.
+
+    Raises:
+        ImportError: If PyMuPDF is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the input PDF is encrypted.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法提取文字。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法提取文字：{input_pdf}") from exc
+
+    try:
+        total_pages = document.page_count
+
+        if page_spec is None:
+            page_indexes = list(range(total_pages))
+        else:
+            page_indexes = parse_page_spec(page_spec, total_pages)
+            if not page_indexes:
+                raise ValueError("頁碼範圍解析結果為空，請確認輸入。")
+
+        extracted_text = []
+        print(f"提取文字（共 {len(page_indexes)} 頁）...")
+
+        for page_index in tqdm(page_indexes, desc="提取文字", unit="頁"):
+            page = document[page_index]
+            text = page.get_text()
+            extracted_text.append(f"--- 第 {page_index + 1} 頁 ---\n{text}\n")
+
+        result = "\n".join(extracted_text)
+
+        if output_txt:
+            output_path = Path(output_txt)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(result, encoding="utf-8")
+            print(f"✓ 文字已保存到：{output_path.resolve()}")
+        else:
+            print(result)
+
+        return result
+    finally:
+        document.close()
+
+
+# ============= 加密解密區 =============
+
+def encrypt_pdf(input_pdf: str, output_pdf: str, user_password: str, owner_password: str | None = None) -> None:
+    """
+    Encrypt a PDF file with password protection.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_pdf: Destination PDF path.
+        user_password: Password required to open the PDF.
+        owner_password: Optional password for owner permissions (defaults to user_password).
+
+    Raises:
+        ImportError: If pikepdf is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        ValueError: If passwords are invalid.
+        OSError: If the output file cannot be written.
+    """
+    if pikepdf is None:
+        raise ImportError("pikepdf 尚未安裝，無法執行加密功能。")
+
+    if not user_password:
+        raise ValueError("使用者密碼不可為空。")
+
+    source_path = Path(input_pdf)
+    if not source_path.is_file():
+        raise FileNotFoundError(f"找不到檔案：{source_path.resolve()}")
+
+    owner_pwd = owner_password or user_password
+
+    print(f"加密 PDF...")
+    try:
+        with pikepdf.open(input_pdf) as pdf:
+            pdf.save(
+                output_pdf,
+                encryption=pikepdf.Encryption(
+                    user=user_password,
+                    owner=owner_pwd,
+                    R=6,  # AES-256 encryption
+                )
+            )
+    except OSError as exc:
+        raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
+
+    print(f"✓ PDF 已加密並保存到：{Path(output_pdf).resolve()}")
+
+
+def decrypt_pdf(input_pdf: str, output_pdf: str, password: str) -> None:
+    """
+    Decrypt a password-protected PDF file.
+
+    Args:
+        input_pdf: Source encrypted PDF path.
+        output_pdf: Destination unencrypted PDF path.
+        password: Password to decrypt the PDF.
+
+    Raises:
+        ImportError: If pikepdf is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the password is incorrect.
+        OSError: If the output file cannot be written.
+    """
+    if pikepdf is None:
+        raise ImportError("pikepdf 尚未安裝，無法執行解密功能。")
+
+    source_path = Path(input_pdf)
+    if not source_path.is_file():
+        raise FileNotFoundError(f"找不到檔案：{source_path.resolve()}")
+
+    print(f"解密 PDF...")
+    try:
+        with pikepdf.open(input_pdf, password=password) as pdf:
+            pdf.save(output_pdf)
+    except pikepdf.PasswordError as exc:  # type: ignore[attr-defined]
+        raise PermissionError(f"密碼錯誤，無法解密：{input_pdf}") from exc
+    except OSError as exc:
+        raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
+
+    print(f"✓ PDF 已解密並保存到：{Path(output_pdf).resolve()}")
+
+
+# ============= 圖片處理區 =============
+
+def extract_images(input_pdf: str, output_dir: str, page_spec: str | None = None) -> None:
+    """
+    Extract all images from a PDF file.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_dir: Directory where images will be saved.
+        page_spec: Optional page specification string for selective extraction.
+
+    Raises:
+        ImportError: If PyMuPDF or Pillow is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the input PDF is encrypted.
+        OSError: If the output directory cannot be created.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法提取圖片。")
+    if Image is None:
+        raise ImportError("Pillow 尚未安裝，無法提取圖片。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法提取圖片：{input_pdf}") from exc
+
+    try:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        document.close()
+        raise OSError(f"無法建立輸出資料夾：{output_dir}") from exc
+
+    try:
+        total_pages = document.page_count
+
+        if page_spec is None:
+            page_indexes = list(range(total_pages))
+        else:
+            page_indexes = parse_page_spec(page_spec, total_pages)
+            if not page_indexes:
+                raise ValueError("頁碼範圍解析結果為空，請確認輸入。")
+
+        image_count = 0
+        print(f"提取圖片（共 {len(page_indexes)} 頁）...")
+
+        for page_index in tqdm(page_indexes, desc="提取圖片", unit="頁"):
+            page = document[page_index]
+            image_list = page.get_images(full=True)
+
+            for img_index, img_info in enumerate(image_list):
+                xref = img_info[0]
+                base_image = document.extract_image(xref)
+                image_bytes = base_image["image"]
+                image_ext = base_image["ext"]
+
+                image_filename = output_path / f"page_{page_index + 1:03d}_img_{img_index + 1:03d}.{image_ext}"
+                image_filename.write_bytes(image_bytes)
+                image_count += 1
+
+        print(f"✓ 成功提取 {image_count} 張圖片")
+    finally:
+        document.close()
+
+
+def pdf_to_images(input_pdf: str, output_dir: str, page_spec: str | None = None, dpi: int = 300, image_format: str = "png") -> None:
+    """
+    Convert PDF pages to image files.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_dir: Directory where images will be saved.
+        page_spec: Optional page specification string for selective conversion.
+        dpi: Resolution for the output images (default 300).
+        image_format: Output image format - 'png', 'jpg', or 'jpeg' (default 'png').
+
+    Raises:
+        ImportError: If PyMuPDF or Pillow is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the input PDF is encrypted.
+        ValueError: If parameters are invalid.
+        OSError: If the output directory cannot be created.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法轉換為圖片。")
+    if Image is None:
+        raise ImportError("Pillow 尚未安裝，無法轉換為圖片。")
+
+    if dpi < 72 or dpi > 600:
+        raise ValueError("DPI 應介於 72 與 600 之間。")
+
+    image_format = image_format.lower()
+    if image_format not in ("png", "jpg", "jpeg"):
+        raise ValueError("圖片格式僅支援 png, jpg, jpeg。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法轉換為圖片：{input_pdf}") from exc
+
+    try:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        document.close()
+        raise OSError(f"無法建立輸出資料夾：{output_dir}") from exc
+
+    try:
+        total_pages = document.page_count
+
+        if page_spec is None:
+            page_indexes = list(range(total_pages))
+        else:
+            page_indexes = parse_page_spec(page_spec, total_pages)
+            if not page_indexes:
+                raise ValueError("頁碼範圍解析結果為空，請確認輸入。")
+
+        zoom = dpi / 72.0
+        matrix = fitz.Matrix(zoom, zoom)
+
+        print(f"轉換 PDF 為圖片（共 {len(page_indexes)} 頁，{dpi} DPI）...")
+
+        for page_index in tqdm(page_indexes, desc="轉換圖片", unit="頁"):
+            page = document[page_index]
+            pix = page.get_pixmap(matrix=matrix)
+
+            output_file = output_path / f"page_{page_index + 1:03d}.{image_format}"
+            pix.save(str(output_file))
+
+        print(f"✓ 成功轉換 {len(page_indexes)} 頁為圖片")
+    finally:
+        document.close()
+
+
+# ============= 頁面重排區 =============
+
+def reorder_pages(input_pdf: str, output_pdf: str, page_order: str) -> None:
+    """
+    Reorder pages in a PDF according to the specified sequence.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_pdf: Destination PDF path.
+        page_order: Comma-separated page numbers in desired order (e.g., "3,1,2,4-6").
+
+    Raises:
+        ImportError: If PyMuPDF is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the input PDF is encrypted.
+        ValueError: If the page order specification is invalid.
+        OSError: If the output file cannot be written.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法重排頁面。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法重排頁面：{input_pdf}") from exc
+
+    try:
+        total_pages = document.page_count
+        page_indexes = parse_page_spec(page_order, total_pages)
+
+        if not page_indexes:
+            raise ValueError("頁碼順序不可為空。")
+
+        print(f"重排 PDF 頁面（{len(page_indexes)} 頁）...")
+
+        # Create a new document with pages in the specified order
+        new_document = fitz.open()
+        for page_index in tqdm(page_indexes, desc="重排頁面", unit="頁"):
+            new_document.insert_pdf(document, from_page=page_index, to_page=page_index)
+
+        try:
+            new_document.save(output_pdf)
+        except OSError as exc:
+            raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
+        finally:
+            new_document.close()
+
+        print(f"✓ 成功重排 {len(page_indexes)} 頁")
+    finally:
+        document.close()
+
+
+# ============= 頁首頁尾區 =============
+
+def add_page_numbers(
+    input_pdf: str,
+    output_pdf: str,
+    position: str = "bottom-right",
+    format_str: str = "{page}",
+    size: int = 10,
+    color: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    offset: int = 20,
+) -> None:
+    """
+    Add page numbers to all pages in a PDF.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_pdf: Destination PDF path.
+        position: Position of page numbers - 'top-left', 'top-center', 'top-right',
+                  'bottom-left', 'bottom-center', 'bottom-right' (default 'bottom-right').
+        format_str: Format string for page numbers, use {page} for current page (default '{page}').
+        size: Font size for page numbers (default 10).
+        color: Text color as RGB tuple with values in [0, 1] (default black).
+        offset: Offset in points from the edge (default 20).
+
+    Raises:
+        ImportError: If PyMuPDF is not installed.
+        FileNotFoundError: If the input PDF does not exist.
+        PermissionError: If the input PDF is encrypted.
+        ValueError: If parameters are invalid.
+        OSError: If the output file cannot be written.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法添加頁碼。")
+
+    valid_positions = {
+        "top-left", "top-center", "top-right",
+        "bottom-left", "bottom-center", "bottom-right"
+    }
+    if position not in valid_positions:
+        raise ValueError(f"位置必須為以下之一：{', '.join(valid_positions)}")
+
+    if "{page}" not in format_str:
+        raise ValueError("格式字串必須包含 {{page}} 佔位符。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法添加頁碼：{input_pdf}") from exc
+
+    try:
+        total_pages = document.page_count
+        print(f"添加頁碼到 {total_pages} 頁...")
+
+        for page_index in tqdm(range(total_pages), desc="添加頁碼", unit="頁"):
+            page = document[page_index]
+            page_num_text = format_str.format(page=page_index + 1)
+
+            # Calculate position
+            page_rect = page.rect
+            text_width = fitz.get_text_length(page_num_text, fontsize=size)
+
+            if "left" in position:
+                x = offset
+            elif "right" in position:
+                x = page_rect.width - text_width - offset
+            else:  # center
+                x = (page_rect.width - text_width) / 2
+
+            if "top" in position:
+                y = offset + size
+            else:  # bottom
+                y = page_rect.height - offset
+
+            point = fitz.Point(x, y)
+            page.insert_text(
+                point,
+                page_num_text,
+                fontsize=size,
+                color=color,
+            )
+
+        try:
+            document.save(output_pdf)
+        except OSError as exc:
+            raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
+
+        print(f"✓ 成功添加頁碼到 {total_pages} 頁")
+    finally:
+        document.close()
+
+
 # ============= 壓縮優化區 =============
 
 
@@ -1146,6 +1565,50 @@ def build_parser() -> "argparse.ArgumentParser":
         help="填寫完成後將表單欄位壓平成一般文字",
     )
 
+    extract_parser = subparsers.add_parser("extract-text", help="從 PDF 提取文字")
+    extract_parser.add_argument("input", help="輸入 PDF 檔案")
+    extract_parser.add_argument("-o", "--output", help="輸出文字檔案（未指定則輸出到螢幕）")
+    extract_parser.add_argument("-p", "--pages", help="要提取的頁碼範圍")
+
+    encrypt_parser = subparsers.add_parser("encrypt", help="加密 PDF 檔案")
+    encrypt_parser.add_argument("input", help="輸入 PDF 檔案")
+    encrypt_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
+    encrypt_parser.add_argument("-u", "--user-password", required=True, help="使用者密碼（開啟檔案需要）")
+    encrypt_parser.add_argument("--owner-password", help="擁有者密碼（權限管理，預設同使用者密碼）")
+
+    decrypt_parser = subparsers.add_parser("decrypt", help="解密 PDF 檔案")
+    decrypt_parser.add_argument("input", help="輸入 PDF 檔案")
+    decrypt_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
+    decrypt_parser.add_argument("-p", "--password", required=True, help="PDF 密碼")
+
+    extract_images_parser = subparsers.add_parser("extract-images", help="從 PDF 提取圖片")
+    extract_images_parser.add_argument("input", help="輸入 PDF 檔案")
+    extract_images_parser.add_argument("-d", "--dir", dest="directory", required=True, help="輸出資料夾")
+    extract_images_parser.add_argument("-p", "--pages", help="要提取的頁碼範圍")
+
+    pdf2img_parser = subparsers.add_parser("pdf-to-images", help="將 PDF 頁面轉換為圖片")
+    pdf2img_parser.add_argument("input", help="輸入 PDF 檔案")
+    pdf2img_parser.add_argument("-d", "--dir", dest="directory", required=True, help="輸出資料夾")
+    pdf2img_parser.add_argument("-p", "--pages", help="要轉換的頁碼範圍")
+    pdf2img_parser.add_argument("--dpi", type=int, default=300, help="圖片解析度（預設 300）")
+    pdf2img_parser.add_argument("--format", default="png", choices=["png", "jpg", "jpeg"], help="圖片格式（預設 png）")
+
+    reorder_parser = subparsers.add_parser("reorder", help="重排 PDF 頁面順序")
+    reorder_parser.add_argument("input", help="輸入 PDF 檔案")
+    reorder_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
+    reorder_parser.add_argument("-p", "--pages", required=True, help="新的頁碼順序（例如：3,1,2,4-6）")
+
+    page_numbers_parser = subparsers.add_parser("page-numbers", help="添加頁碼")
+    page_numbers_parser.add_argument("input", help="輸入 PDF 檔案")
+    page_numbers_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
+    page_numbers_parser.add_argument("--position", default="bottom-right",
+                                      choices=["top-left", "top-center", "top-right",
+                                               "bottom-left", "bottom-center", "bottom-right"],
+                                      help="頁碼位置（預設 bottom-right）")
+    page_numbers_parser.add_argument("--format", default="{page}", help="頁碼格式（使用 {page} 表示頁碼，預設 '{page}'）")
+    page_numbers_parser.add_argument("--size", type=int, default=10, help="字體大小（預設 10）")
+    page_numbers_parser.add_argument("--offset", type=int, default=20, help="距離邊緣的偏移量（預設 20）")
+
     return parser
 
 
@@ -1215,6 +1678,27 @@ def main(argv: Sequence[str] | None = None) -> None:
                 print(
                     f"✓ 已填寫 {len(filled)} 個欄位，輸出檔案：{Path(args.output).resolve()}"
                 )
+        elif args.command == "extract-text":
+            extract_text(args.input, args.output, args.pages)
+        elif args.command == "encrypt":
+            encrypt_pdf(args.input, args.output, args.user_password, args.owner_password)
+        elif args.command == "decrypt":
+            decrypt_pdf(args.input, args.output, args.password)
+        elif args.command == "extract-images":
+            extract_images(args.input, args.directory, args.pages)
+        elif args.command == "pdf-to-images":
+            pdf_to_images(args.input, args.directory, args.pages, args.dpi, args.format)
+        elif args.command == "reorder":
+            reorder_pages(args.input, args.output, args.pages)
+        elif args.command == "page-numbers":
+            add_page_numbers(
+                args.input,
+                args.output,
+                position=args.position,
+                format_str=args.format,
+                size=args.size,
+                offset=args.offset,
+            )
         else:  # pragma: no cover - subparser enforces valid commands
             parser.print_help()
     except FileNotFoundError as err:
