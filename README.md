@@ -12,10 +12,13 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ Delete specific pages (reverse deletion to avoid index misalignment)
 - ✅ Rotate pages with cumulative angle support
 - ✅ Add custom text watermarks to all pages
-- ✅ Basic compression using pikepdf with linearization support
+- ✅ Advanced compression with aggressive image optimization
 - ✅ Query PDF file information and metadata
-- ✅ Graphical User Interface (GUI) for easy operation
+- ✅ **NEW** Edit PDF metadata (title, author, subject, keywords, etc.)
+- ✅ **NEW** Compare two PDFs and generate diff reports (HTML or summary)
+- ✅ **NEW** Fill DOCX templates with data and convert to PDF
 - ✅ Autofill interactive PDF forms from JSON or inline data
+- ✅ Graphical User Interface (GUI) for easy operation
 
 ## Installation
 
@@ -74,13 +77,50 @@ python pdf_toolkit.py watermark input.pdf -t "DRAFT" --size 48 --alpha 0.2 --ang
 # Basic compression (with optional linearization)
 python pdf_toolkit.py optimize input.pdf -o optimized.pdf --linearize
 
-# Aggressive compression flag (currently falls back to basic compression with reminder)
+# Aggressive compression with image recompression (true aggressive mode)
 python pdf_toolkit.py optimize input.pdf -o optimized_aggressive.pdf --aggressive --dpi 150
 ```
 
 #### View PDF Information
 ```bash
 python pdf_toolkit.py info input.pdf
+```
+
+#### Edit PDF Metadata
+```bash
+# Edit metadata using command-line arguments
+python pdf_toolkit.py edit-metadata input.pdf -o output.pdf -v title="My Document" -v author="John Doe"
+
+# Edit metadata using JSON file
+python pdf_toolkit.py edit-metadata input.pdf -o output.pdf -d metadata.json
+
+# Supported metadata fields: title, author, subject, keywords, creator, producer
+```
+
+#### Compare Two PDFs (Diff)
+```bash
+# Show summary in terminal
+python pdf_toolkit.py diff document_v1.pdf document_v2.pdf
+
+# Generate HTML report
+python pdf_toolkit.py diff document_v1.pdf document_v2.pdf --format html -o diff_report.html
+
+# The diff tool detects:
+# - Added/deleted/modified lines
+# - Changes in dates, currency, percentages, IDs, emails, phone numbers
+# - Similarity percentage
+```
+
+#### Fill DOCX Templates
+```bash
+# Fill a DOCX template with placeholders like {{name}}, {{date}}, etc.
+python pdf_toolkit.py template-fill template.docx -o output.docx -v name="John Doe" -v date="2025-01-15"
+
+# Fill from JSON data file
+python pdf_toolkit.py template-fill template.docx -o output.docx -d data.json
+
+# Fill and convert to PDF (requires LibreOffice or docx2pdf)
+python pdf_toolkit.py template-fill template.docx -o output.pdf -d data.json --to-pdf
 ```
 
 #### Autofill PDF Form Fields
@@ -142,6 +182,13 @@ python quick_test.py
 ### GUI Requirements (Optional)
 - tkinter (usually included with Python)
 
+### DOCX to PDF Conversion (Optional)
+For converting DOCX templates to PDF, install one of:
+- **LibreOffice** (recommended): Install via your package manager
+  - Ubuntu/Debian: `sudo apt install libreoffice`
+  - macOS: `brew install libreoffice`
+  - Windows: Download from https://www.libreoffice.org/
+- **docx2pdf** (Python package): `pip install docx2pdf` (Windows only)
 
 ## Author
 
