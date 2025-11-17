@@ -36,32 +36,12 @@ except ImportError:  # pragma: no cover - handled at runtime
     Image = None
 
 try:
-    import pytesseract  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - handled at runtime
-    pytesseract = None
-
-try:
-    from docx import Document  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - handled at runtime
-    Document = None
-
-try:
-    from odf.opendocument import OpenDocumentText  # type: ignore[import-not-found]
-    from odf.text import P  # type: ignore[import-not-found]
-    from odf import style  # type: ignore[import-not-found]
-    from odf.style import Style, TextProperties, ParagraphProperties  # type: ignore[import-not-found]
-    odf_available = True
-except ImportError:  # pragma: no cover - handled at runtime
-    odf_available = False
-    OpenDocumentText = None
-    P = None
-    style = None
-    Style = None
-    TextProperties = None
-    ParagraphProperties = None
+    import subprocess
+except ImportError:  # pragma: no cover - subprocess is standard library
+    subprocess = None
 
 
-__version__ = "0.3.0"
+__version__ = "0.2.0"
 
 
 class _NullStream:
@@ -884,423 +864,257 @@ def print_pdf_info(input_pdf: str) -> None:
     print(f"修改日期: {info['mod_date']}")
 
 
-# ============= 文字提取區 =============
-
-def extract_text(input_pdf: str, output_txt: str | None = None, page_spec: str | None = None) -> str:
-    """
-    Extract text content from a PDF file.
-
-    Args:
-        input_pdf: Source PDF path.
-        output_txt: Optional output text file path.
-        page_spec: Optional page specification string for selective extraction.
-
-    Returns:
-        Extracted text content.
-
-    Raises:
-        ImportError: If PyMuPDF is not installed.
-        FileNotFoundError: If the input PDF does not exist.
-        PermissionError: If the input PDF is encrypted.
-    """
-    if fitz is None:
-        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法提取文字。")
-
-    try:
-        document = safe_open_pdf(input_pdf)
-    except PermissionError as exc:
-        raise PermissionError(f"檔案已加密，無法提取文字：{input_pdf}") from exc
-
-    try:
-        total_pages = document.page_count
-
-        if page_spec is None:
-            page_indexes = list(range(total_pages))
-        else:
-            page_indexes = parse_page_spec(page_spec, total_pages)
-            if not page_indexes:
-                raise ValueError("頁碼範圍解析結果為空，請確認輸入。")
-
-        extracted_text = []
-        print(f"提取文字（共 {len(page_indexes)} 頁）...")
-
-        for page_index in tqdm(page_indexes, desc="提取文字", unit="頁"):
-            page = document[page_index]
-            text = page.get_text()
-            extracted_text.append(f"--- 第 {page_index + 1} 頁 ---\n{text}\n")
-
-        result = "\n".join(extracted_text)
-
-        if output_txt:
-            output_path = Path(output_txt)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(result, encoding="utf-8")
-            print(f"✓ 文字已保存到：{output_path.resolve()}")
-        else:
-            print(result)
-
-        return result
-    finally:
-        document.close()
-
-
-# ============= 加密解密區 =============
-
-def encrypt_pdf(input_pdf: str, output_pdf: str, user_password: str, owner_password: str | None = None) -> None:
-    """
-    Encrypt a PDF file with password protection.
-
-    Args:
-        input_pdf: Source PDF path.
-        output_pdf: Destination PDF path.
-        user_password: Password required to open the PDF.
-        owner_password: Optional password for owner permissions (defaults to user_password).
-
-    Raises:
-        ImportError: If pikepdf is not installed.
-        FileNotFoundError: If the input PDF does not exist.
-        ValueError: If passwords are invalid.
-        OSError: If the output file cannot be written.
-    """
-    if pikepdf is None:
-        raise ImportError("pikepdf 尚未安裝，無法執行加密功能。")
-
-    if not user_password:
-        raise ValueError("使用者密碼不可為空。")
-
-    source_path = Path(input_pdf)
-    if not source_path.is_file():
-        raise FileNotFoundError(f"找不到檔案：{source_path.resolve()}")
-
-    owner_pwd = owner_password or user_password
-
-    print(f"加密 PDF...")
-    try:
-        with pikepdf.open(input_pdf) as pdf:
-            pdf.save(
-                output_pdf,
-                encryption=pikepdf.Encryption(
-                    user=user_password,
-                    owner=owner_pwd,
-                    R=6,  # AES-256 encryption
-                )
-            )
-    except OSError as exc:
-        raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
-
-    print(f"✓ PDF 已加密並保存到：{Path(output_pdf).resolve()}")
-
-
-def decrypt_pdf(input_pdf: str, output_pdf: str, password: str) -> None:
-    """
-    Decrypt a password-protected PDF file.
-
-    Args:
-        input_pdf: Source encrypted PDF path.
-        output_pdf: Destination unencrypted PDF path.
-        password: Password to decrypt the PDF.
-
-    Raises:
-        ImportError: If pikepdf is not installed.
-        FileNotFoundError: If the input PDF does not exist.
-        PermissionError: If the password is incorrect.
-        OSError: If the output file cannot be written.
-    """
-    if pikepdf is None:
-        raise ImportError("pikepdf 尚未安裝，無法執行解密功能。")
-
-    source_path = Path(input_pdf)
-    if not source_path.is_file():
-        raise FileNotFoundError(f"找不到檔案：{source_path.resolve()}")
-
-    print(f"解密 PDF...")
-    try:
-        with pikepdf.open(input_pdf, password=password) as pdf:
-            pdf.save(output_pdf)
-    except pikepdf.PasswordError as exc:  # type: ignore[attr-defined]
-        raise PermissionError(f"密碼錯誤，無法解密：{input_pdf}") from exc
-    except OSError as exc:
-        raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
-
-    print(f"✓ PDF 已解密並保存到：{Path(output_pdf).resolve()}")
-
-
-# ============= 圖片處理區 =============
-
-def extract_images(input_pdf: str, output_dir: str, page_spec: str | None = None) -> None:
-    """
-    Extract all images from a PDF file.
-
-    Args:
-        input_pdf: Source PDF path.
-        output_dir: Directory where images will be saved.
-        page_spec: Optional page specification string for selective extraction.
-
-    Raises:
-        ImportError: If PyMuPDF or Pillow is not installed.
-        FileNotFoundError: If the input PDF does not exist.
-        PermissionError: If the input PDF is encrypted.
-        OSError: If the output directory cannot be created.
-    """
-    if fitz is None:
-        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法提取圖片。")
-    if Image is None:
-        raise ImportError("Pillow 尚未安裝，無法提取圖片。")
-
-    try:
-        document = safe_open_pdf(input_pdf)
-    except PermissionError as exc:
-        raise PermissionError(f"檔案已加密，無法提取圖片：{input_pdf}") from exc
-
-    try:
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        document.close()
-        raise OSError(f"無法建立輸出資料夾：{output_dir}") from exc
-
-    try:
-        total_pages = document.page_count
-
-        if page_spec is None:
-            page_indexes = list(range(total_pages))
-        else:
-            page_indexes = parse_page_spec(page_spec, total_pages)
-            if not page_indexes:
-                raise ValueError("頁碼範圍解析結果為空，請確認輸入。")
-
-        image_count = 0
-        print(f"提取圖片（共 {len(page_indexes)} 頁）...")
-
-        for page_index in tqdm(page_indexes, desc="提取圖片", unit="頁"):
-            page = document[page_index]
-            image_list = page.get_images(full=True)
-
-            for img_index, img_info in enumerate(image_list):
-                xref = img_info[0]
-                base_image = document.extract_image(xref)
-                image_bytes = base_image["image"]
-                image_ext = base_image["ext"]
-
-                image_filename = output_path / f"page_{page_index + 1:03d}_img_{img_index + 1:03d}.{image_ext}"
-                image_filename.write_bytes(image_bytes)
-                image_count += 1
-
-        print(f"✓ 成功提取 {image_count} 張圖片")
-    finally:
-        document.close()
-
-
-def pdf_to_images(input_pdf: str, output_dir: str, page_spec: str | None = None, dpi: int = 300, image_format: str = "png") -> None:
-    """
-    Convert PDF pages to image files.
-
-    Args:
-        input_pdf: Source PDF path.
-        output_dir: Directory where images will be saved.
-        page_spec: Optional page specification string for selective conversion.
-        dpi: Resolution for the output images (default 300).
-        image_format: Output image format - 'png', 'jpg', or 'jpeg' (default 'png').
-
-    Raises:
-        ImportError: If PyMuPDF or Pillow is not installed.
-        FileNotFoundError: If the input PDF does not exist.
-        PermissionError: If the input PDF is encrypted.
-        ValueError: If parameters are invalid.
-        OSError: If the output directory cannot be created.
-    """
-    if fitz is None:
-        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法轉換為圖片。")
-    if Image is None:
-        raise ImportError("Pillow 尚未安裝，無法轉換為圖片。")
-
-    if dpi < 72 or dpi > 600:
-        raise ValueError("DPI 應介於 72 與 600 之間。")
-
-    image_format = image_format.lower()
-    if image_format not in ("png", "jpg", "jpeg"):
-        raise ValueError("圖片格式僅支援 png, jpg, jpeg。")
-
-    try:
-        document = safe_open_pdf(input_pdf)
-    except PermissionError as exc:
-        raise PermissionError(f"檔案已加密，無法轉換為圖片：{input_pdf}") from exc
-
-    try:
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        document.close()
-        raise OSError(f"無法建立輸出資料夾：{output_dir}") from exc
-
-    try:
-        total_pages = document.page_count
-
-        if page_spec is None:
-            page_indexes = list(range(total_pages))
-        else:
-            page_indexes = parse_page_spec(page_spec, total_pages)
-            if not page_indexes:
-                raise ValueError("頁碼範圍解析結果為空，請確認輸入。")
-
-        zoom = dpi / 72.0
-        matrix = fitz.Matrix(zoom, zoom)
-
-        print(f"轉換 PDF 為圖片（共 {len(page_indexes)} 頁，{dpi} DPI）...")
-
-        for page_index in tqdm(page_indexes, desc="轉換圖片", unit="頁"):
-            page = document[page_index]
-            pix = page.get_pixmap(matrix=matrix)
-
-            output_file = output_path / f"page_{page_index + 1:03d}.{image_format}"
-            pix.save(str(output_file))
-
-        print(f"✓ 成功轉換 {len(page_indexes)} 頁為圖片")
-    finally:
-        document.close()
-
-
-# ============= 頁面重排區 =============
-
-def reorder_pages(input_pdf: str, output_pdf: str, page_order: str) -> None:
-    """
-    Reorder pages in a PDF according to the specified sequence.
-
-    Args:
-        input_pdf: Source PDF path.
-        output_pdf: Destination PDF path.
-        page_order: Comma-separated page numbers in desired order (e.g., "3,1,2,4-6").
-
-    Raises:
-        ImportError: If PyMuPDF is not installed.
-        FileNotFoundError: If the input PDF does not exist.
-        PermissionError: If the input PDF is encrypted.
-        ValueError: If the page order specification is invalid.
-        OSError: If the output file cannot be written.
-    """
-    if fitz is None:
-        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法重排頁面。")
-
-    try:
-        document = safe_open_pdf(input_pdf)
-    except PermissionError as exc:
-        raise PermissionError(f"檔案已加密，無法重排頁面：{input_pdf}") from exc
-
-    try:
-        total_pages = document.page_count
-        page_indexes = parse_page_spec(page_order, total_pages)
-
-        if not page_indexes:
-            raise ValueError("頁碼順序不可為空。")
-
-        print(f"重排 PDF 頁面（{len(page_indexes)} 頁）...")
-
-        # Create a new document with pages in the specified order
-        new_document = fitz.open()
-        for page_index in tqdm(page_indexes, desc="重排頁面", unit="頁"):
-            new_document.insert_pdf(document, from_page=page_index, to_page=page_index)
-
-        try:
-            new_document.save(output_pdf)
-        except OSError as exc:
-            raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
-        finally:
-            new_document.close()
-
-        print(f"✓ 成功重排 {len(page_indexes)} 頁")
-    finally:
-        document.close()
-
-
-# ============= 頁首頁尾區 =============
-
-def add_page_numbers(
+def edit_pdf_metadata(
     input_pdf: str,
     output_pdf: str,
-    position: str = "bottom-right",
-    format_str: str = "{page}",
-    size: int = 10,
-    color: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    offset: int = 20,
+    metadata: dict[str, Any],
 ) -> None:
     """
-    Add page numbers to all pages in a PDF.
+    Edit PDF metadata (title, author, subject, keywords, etc.).
 
     Args:
         input_pdf: Source PDF path.
         output_pdf: Destination PDF path.
-        position: Position of page numbers - 'top-left', 'top-center', 'top-right',
-                  'bottom-left', 'bottom-center', 'bottom-right' (default 'bottom-right').
-        format_str: Format string for page numbers, use {page} for current page (default '{page}').
-        size: Font size for page numbers (default 10).
-        color: Text color as RGB tuple with values in [0, 1] (default black).
-        offset: Offset in points from the edge (default 20).
+        metadata: Dictionary with metadata key-value pairs.
 
     Raises:
         ImportError: If PyMuPDF is not installed.
         FileNotFoundError: If the input PDF does not exist.
         PermissionError: If the input PDF is encrypted.
-        ValueError: If parameters are invalid.
-        OSError: If the output file cannot be written.
+        ValueError: If the PDF cannot be read.
     """
     if fitz is None:
-        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法添加頁碼。")
-
-    valid_positions = {
-        "top-left", "top-center", "top-right",
-        "bottom-left", "bottom-center", "bottom-right"
-    }
-    if position not in valid_positions:
-        raise ValueError(f"位置必須為以下之一：{', '.join(valid_positions)}")
-
-    if "{page}" not in format_str:
-        raise ValueError("格式字串必須包含 {{page}} 佔位符。")
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，無法編輯 PDF 元資料。")
 
     try:
         document = safe_open_pdf(input_pdf)
     except PermissionError as exc:
-        raise PermissionError(f"檔案已加密，無法添加頁碼：{input_pdf}") from exc
+        raise PermissionError(f"檔案已加密，無法編輯元資料：{input_pdf}") from exc
 
     try:
-        total_pages = document.page_count
-        print(f"添加頁碼到 {total_pages} 頁...")
+        # Map common metadata keys to PDF metadata keys
+        key_mapping = {
+            "title": "title",
+            "author": "author",
+            "subject": "subject",
+            "keywords": "keywords",
+            "creator": "creator",
+            "producer": "producer",
+        }
 
-        for page_index in tqdm(range(total_pages), desc="添加頁碼", unit="頁"):
-            page = document[page_index]
-            page_num_text = format_str.format(page=page_index + 1)
+        current_metadata = document.metadata or {}
+        updated_count = 0
 
-            # Calculate position
-            page_rect = page.rect
-            text_width = fitz.get_text_length(page_num_text, fontsize=size)
+        for key, value in metadata.items():
+            key_lower = key.lower()
+            if key_lower in key_mapping:
+                pdf_key = key_mapping[key_lower]
+                current_metadata[pdf_key] = str(value)
+                updated_count += 1
 
-            if "left" in position:
-                x = offset
-            elif "right" in position:
-                x = page_rect.width - text_width - offset
-            else:  # center
-                x = (page_rect.width - text_width) / 2
-
-            if "top" in position:
-                y = offset + size
-            else:  # bottom
-                y = page_rect.height - offset
-
-            point = fitz.Point(x, y)
-            page.insert_text(
-                point,
-                page_num_text,
-                fontsize=size,
-                color=color,
-            )
+        document.set_metadata(current_metadata)
 
         try:
             document.save(output_pdf)
         except OSError as exc:
             raise OSError(f"無法寫入輸出檔案：{output_pdf}") from exc
 
-        print(f"✓ 成功添加頁碼到 {total_pages} 頁")
+        print(f"✓ 已更新 {updated_count} 個元資料欄位")
     finally:
         document.close()
+
+
+def compare_pdfs(
+    pdf1: str,
+    pdf2: str,
+    output_report: str | None = None,
+    format_type: str = "summary",
+) -> None:
+    """
+    Compare two PDF files and show differences.
+
+    Args:
+        pdf1: First PDF path.
+        pdf2: Second PDF path.
+        output_report: Optional output path for HTML report.
+        format_type: Output format - 'summary' for console or 'html' for report.
+
+    Raises:
+        ImportError: If required libraries are not installed.
+        FileNotFoundError: If any input PDF does not exist.
+        ValueError: If the format type is invalid.
+    """
+    try:
+        from core.pdf_diff_tool import PDFDiffTool
+    except ImportError as exc:
+        raise ImportError("無法載入 PDF 比較工具。") from exc
+
+    check_file_exists(pdf1)
+    check_file_exists(pdf2)
+
+    print(f"比較 PDF 文件...")
+    print(f"  來源 1: {Path(pdf1).name}")
+    print(f"  來源 2: {Path(pdf2).name}")
+
+    tool = PDFDiffTool()
+    result = tool.compare_pdfs(pdf1, pdf2)
+
+    if format_type == "html":
+        if not output_report:
+            output_report = "pdf_diff_report.html"
+        report_path = tool.generate_html_report(result, output_report)
+        print(f"✓ 已產生 HTML 報告：{report_path.resolve()}")
+    else:
+        print("\n比較結果")
+        print("========")
+        print(f"相似度: {result.similarity:.2f}%")
+        print(f"新增行數: {len(result.added)}")
+        print(f"刪除行數: {len(result.deleted)}")
+        print(f"修改行數: {len(result.modified)}")
+
+        if result.key_changes:
+            print("\n重要變更:")
+            for category, changes in result.key_changes.items():
+                print(f"\n  {category.title()}:")
+                for change in changes:
+                    print(f"    - {change}")
+
+        if result.added and len(result.added) <= 10:
+            print("\n新增的內容:")
+            for line in result.added[:10]:
+                print(f"  + {line}")
+
+        if result.deleted and len(result.deleted) <= 10:
+            print("\n刪除的內容:")
+            for line in result.deleted[:10]:
+                print(f"  - {line}")
+
+        if len(result.added) > 10 or len(result.deleted) > 10:
+            print(f"\n提示：使用 --format html 產生完整報告")
+
+
+def fill_docx_template(
+    template_path: str,
+    output_path: str,
+    data: dict[str, Any],
+    convert_to_pdf: bool = False,
+) -> None:
+    """
+    Fill a DOCX template with data and optionally convert to PDF.
+
+    Args:
+        template_path: Path to the DOCX template file.
+        output_path: Path for the output file.
+        data: Dictionary with placeholder values.
+        convert_to_pdf: Whether to convert the output to PDF.
+
+    Raises:
+        ImportError: If required libraries are not installed.
+        FileNotFoundError: If the template does not exist.
+        ValueError: If the template or data is invalid.
+    """
+    try:
+        from core.template_filler import TemplateFiller
+    except ImportError as exc:
+        raise ImportError("無法載入範本填寫工具。") from exc
+
+    check_file_exists(template_path)
+
+    if not data:
+        raise ValueError("未提供任何填寫資料。請使用 --data 或 --value 指定欄位內容。")
+
+    print(f"填寫 DOCX 範本...")
+
+    filler = TemplateFiller()
+    result_path = filler.fill_docx_template(template_path, data)
+
+    # Move to desired output location
+    import shutil
+    final_path = Path(output_path)
+
+    if convert_to_pdf:
+        if not final_path.suffix.lower() == ".pdf":
+            final_path = final_path.with_suffix(".pdf")
+
+        print(f"轉換為 PDF...")
+        try:
+            convert_docx_to_pdf(str(result_path), str(final_path))
+            result_path.unlink()  # Remove intermediate DOCX
+        except Exception as exc:
+            # If conversion fails, keep the DOCX
+            final_path = final_path.with_suffix(".docx")
+            shutil.move(str(result_path), str(final_path))
+            print(f"⚠ PDF 轉換失敗，已保留 DOCX 檔案：{exc}")
+    else:
+        if not final_path.suffix.lower() == ".docx":
+            final_path = final_path.with_suffix(".docx")
+        shutil.move(str(result_path), str(final_path))
+
+    print(f"✓ 已填寫範本並儲存至：{final_path.resolve()}")
+
+
+def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> None:
+    """
+    Convert a DOCX file to PDF using LibreOffice or other converters.
+
+    Args:
+        docx_path: Path to the DOCX file.
+        pdf_path: Path for the output PDF file.
+
+    Raises:
+        FileNotFoundError: If the DOCX file does not exist.
+        RuntimeError: If conversion fails or no converter is available.
+    """
+    check_file_exists(docx_path)
+
+    docx_file = Path(docx_path)
+    pdf_file = Path(pdf_path)
+
+    # Try docx2pdf first (if available)
+    try:
+        import docx2pdf
+        docx2pdf.convert(str(docx_file), str(pdf_file))
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        print(f"⚠ docx2pdf 轉換失敗：{exc}")
+
+    # Try LibreOffice
+    if subprocess:
+        try:
+            # Check if libreoffice is available
+            result = subprocess.run(
+                ["libreoffice", "--version"],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                output_dir = pdf_file.parent
+                subprocess.run(
+                    [
+                        "libreoffice",
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        str(output_dir),
+                        str(docx_file),
+                    ],
+                    check=True,
+                    timeout=60,
+                )
+                # LibreOffice creates file with same name as input
+                generated_pdf = output_dir / docx_file.with_suffix(".pdf").name
+                if generated_pdf != pdf_file and generated_pdf.exists():
+                    generated_pdf.rename(pdf_file)
+                return
+        except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    raise RuntimeError(
+        "無法轉換 DOCX 到 PDF。請安裝 'pip install docx2pdf' 或 LibreOffice。"
+    )
 
 
 # ============= 壓縮優化區 =============
@@ -1507,226 +1321,6 @@ def optimize_pdf(
         f"（節省 {saved_ratio:.1f}%）"
     )
 
-    if aggressive:
-        print("⚠ 簡化版進階壓縮已執行基礎壓縮，圖片重採樣功能待後續補強。")
-
-
-# ============= OCR 文字識別區 =============
-
-def extract_text_from_pdf_ocr(
-    input_pdf: str,
-    language: str = "eng",
-    dpi: int = 300,
-) -> str:
-    """
-    Extract text from a PDF using OCR (Optical Character Recognition).
-
-    This function is useful for scanned PDFs or image-based PDFs where text
-    cannot be extracted directly. It converts each page to an image and uses
-    Tesseract OCR to recognize the text.
-
-    Args:
-        input_pdf: Source PDF path.
-        language: OCR language code (default "eng" for English).
-                  Common codes: eng, chi_sim, chi_tra, fra, deu, spa, jpn, etc.
-        dpi: DPI resolution for rendering pages (default 300).
-
-    Returns:
-        Extracted text content from all pages.
-
-    Raises:
-        ImportError: If required libraries (PyMuPDF, Pillow, pytesseract) are not installed.
-        FileNotFoundError: If the input PDF does not exist or Tesseract is not installed.
-        PermissionError: If the input PDF is encrypted.
-        ValueError: If the PDF cannot be read.
-    """
-    if fitz is None:
-        raise ImportError("PyMuPDF (fitz) 尚未安裝，請先執行 'pip install PyMuPDF>=1.23.0'。")
-    if Image is None:
-        raise ImportError("Pillow 尚未安裝，請先執行 'pip install Pillow>=10.0.0'。")
-    if pytesseract is None:
-        raise ImportError("pytesseract 尚未安裝，請先執行 'pip install pytesseract>=0.3.10'。")
-
-    try:
-        document = safe_open_pdf(input_pdf)
-    except PermissionError as exc:
-        raise PermissionError(f"檔案已加密，無法進行 OCR：{input_pdf}") from exc
-
-    try:
-        total_pages = document.page_count
-        print(f"正在進行 OCR 文字識別（共 {total_pages} 頁，語言：{language}）...")
-
-        extracted_text = []
-
-        for page_index in tqdm(range(total_pages), desc="OCR 識別", unit="頁"):
-            page = document[page_index]
-
-            # Render page as image with specified DPI
-            matrix = fitz.Matrix(dpi / 72, dpi / 72)
-            pix = page.get_pixmap(matrix=matrix)
-
-            # Convert PyMuPDF pixmap to PIL Image
-            img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
-
-            # Perform OCR on the image
-            try:
-                page_text = pytesseract.image_to_string(img, lang=language)
-                if page_text.strip():
-                    extracted_text.append(f"--- 第 {page_index + 1} 頁 ---\n")
-                    extracted_text.append(page_text)
-                    extracted_text.append("\n")
-            except pytesseract.TesseractNotFoundError as exc:
-                raise FileNotFoundError(
-                    "Tesseract OCR 引擎未安裝。請先安裝 Tesseract：\n"
-                    "  - Ubuntu/Debian: sudo apt-get install tesseract-ocr\n"
-                    "  - macOS: brew install tesseract\n"
-                    "  - Windows: 從 https://github.com/UB-Mannheim/tesseract/wiki 下載安裝"
-                ) from exc
-    finally:
-        document.close()
-
-    result = "".join(extracted_text)
-    print(f"✓ OCR 識別完成，共擷取 {len(result)} 個字元")
-    return result
-
-
-def save_text_to_docx(text: str, output_path: str) -> None:
-    """
-    Save extracted text to a Microsoft Word (.docx) document.
-
-    Args:
-        text: Text content to save.
-        output_path: Destination .docx file path.
-
-    Raises:
-        ImportError: If python-docx is not installed.
-        OSError: If the output file cannot be written.
-    """
-    if Document is None:
-        raise ImportError(
-            "python-docx 尚未安裝，請先執行 'pip install python-docx>=0.8.11'。"
-        )
-
-    doc = Document()
-    doc.add_heading("OCR 擷取文字", level=1)
-
-    # Split text into paragraphs and add to document
-    paragraphs = text.split("\n")
-    for para in paragraphs:
-        if para.strip():
-            doc.add_paragraph(para)
-
-    try:
-        output_file = Path(output_path)
-        output_parent = output_file.parent
-        if output_parent and not output_parent.exists():
-            output_parent.mkdir(parents=True, exist_ok=True)
-        doc.save(output_path)
-    except OSError as exc:
-        raise OSError(f"無法寫入輸出檔案：{output_path}") from exc
-
-    print(f"✓ 已儲存為 Microsoft Word 格式：{output_path}")
-
-
-def save_text_to_odt(text: str, output_path: str) -> None:
-    """
-    Save extracted text to a LibreOffice Writer (.odt) document.
-
-    Args:
-        text: Text content to save.
-        output_path: Destination .odt file path.
-
-    Raises:
-        ImportError: If odfpy is not installed.
-        OSError: If the output file cannot be written.
-    """
-    if not odf_available:
-        raise ImportError(
-            "odfpy 尚未安裝，請先執行 'pip install odfpy>=1.4.1'。"
-        )
-
-    doc = OpenDocumentText()
-
-    # Add a title
-    title_style = Style(name="Title", family="paragraph")
-    title_style.addElement(TextProperties(fontsize="18pt", fontweight="bold"))
-    doc.styles.addElement(title_style)
-
-    title = P(text="OCR 擷取文字", stylename=title_style)
-    doc.text.addElement(title)
-
-    # Add paragraphs
-    paragraphs = text.split("\n")
-    for para_text in paragraphs:
-        if para_text.strip():
-            para = P(text=para_text)
-            doc.text.addElement(para)
-
-    try:
-        output_file = Path(output_path)
-        output_parent = output_file.parent
-        if output_parent and not output_parent.exists():
-            output_parent.mkdir(parents=True, exist_ok=True)
-        doc.save(output_path)
-    except OSError as exc:
-        raise OSError(f"無法寫入輸出檔案：{output_path}") from exc
-
-    print(f"✓ 已儲存為 LibreOffice Writer 格式：{output_path}")
-
-
-def ocr_pdf_to_text(
-    input_pdf: str,
-    output_docx: str | None = None,
-    output_odt: str | None = None,
-    output_txt: str | None = None,
-    language: str = "eng",
-    dpi: int = 300,
-) -> str:
-    """
-    Perform OCR on a PDF and save the extracted text to various formats.
-
-    Args:
-        input_pdf: Source PDF path.
-        output_docx: Optional path to save as Microsoft Word (.docx).
-        output_odt: Optional path to save as LibreOffice Writer (.odt).
-        output_txt: Optional path to save as plain text (.txt).
-        language: OCR language code (default "eng").
-        dpi: DPI resolution for rendering pages (default 300).
-
-    Returns:
-        Extracted text content.
-
-    Raises:
-        ValueError: If no output format is specified.
-        Same exceptions as extract_text_from_pdf_ocr, save_text_to_docx, and save_text_to_odt.
-    """
-    if not output_docx and not output_odt and not output_txt:
-        raise ValueError("請至少指定一個輸出格式（--docx、--odt 或 --txt）。")
-
-    # Extract text using OCR
-    text = extract_text_from_pdf_ocr(input_pdf, language=language, dpi=dpi)
-
-    # Save to requested formats
-    if output_docx:
-        save_text_to_docx(text, output_docx)
-
-    if output_odt:
-        save_text_to_odt(text, output_odt)
-
-    if output_txt:
-        try:
-            output_file = Path(output_txt)
-            output_parent = output_file.parent
-            if output_parent and not output_parent.exists():
-                output_parent.mkdir(parents=True, exist_ok=True)
-            output_file.write_text(text, encoding="utf-8")
-            print(f"✓ 已儲存為純文字格式：{output_txt}")
-        except OSError as exc:
-            raise OSError(f"無法寫入輸出檔案：{output_txt}") from exc
-
-    return text
-
 
 def build_parser() -> "argparse.ArgumentParser":
     """Construct the CLI argument parser."""
@@ -1807,74 +1401,46 @@ def build_parser() -> "argparse.ArgumentParser":
         help="填寫完成後將表單欄位壓平成一般文字",
     )
 
-    extract_parser = subparsers.add_parser("extract-text", help="從 PDF 提取文字")
-    extract_parser.add_argument("input", help="輸入 PDF 檔案")
-    extract_parser.add_argument("-o", "--output", help="輸出文字檔案（未指定則輸出到螢幕）")
-    extract_parser.add_argument("-p", "--pages", help="要提取的頁碼範圍")
-
-    encrypt_parser = subparsers.add_parser("encrypt", help="加密 PDF 檔案")
-    encrypt_parser.add_argument("input", help="輸入 PDF 檔案")
-    encrypt_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
-    encrypt_parser.add_argument("-u", "--user-password", required=True, help="使用者密碼（開啟檔案需要）")
-    encrypt_parser.add_argument("--owner-password", help="擁有者密碼（權限管理，預設同使用者密碼）")
-
-    decrypt_parser = subparsers.add_parser("decrypt", help="解密 PDF 檔案")
-    decrypt_parser.add_argument("input", help="輸入 PDF 檔案")
-    decrypt_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
-    decrypt_parser.add_argument("-p", "--password", required=True, help="PDF 密碼")
-
-    extract_images_parser = subparsers.add_parser("extract-images", help="從 PDF 提取圖片")
-    extract_images_parser.add_argument("input", help="輸入 PDF 檔案")
-    extract_images_parser.add_argument("-d", "--dir", dest="directory", required=True, help="輸出資料夾")
-    extract_images_parser.add_argument("-p", "--pages", help="要提取的頁碼範圍")
-
-    pdf2img_parser = subparsers.add_parser("pdf-to-images", help="將 PDF 頁面轉換為圖片")
-    pdf2img_parser.add_argument("input", help="輸入 PDF 檔案")
-    pdf2img_parser.add_argument("-d", "--dir", dest="directory", required=True, help="輸出資料夾")
-    pdf2img_parser.add_argument("-p", "--pages", help="要轉換的頁碼範圍")
-    pdf2img_parser.add_argument("--dpi", type=int, default=300, help="圖片解析度（預設 300）")
-    pdf2img_parser.add_argument("--format", default="png", choices=["png", "jpg", "jpeg"], help="圖片格式（預設 png）")
-
-    reorder_parser = subparsers.add_parser("reorder", help="重排 PDF 頁面順序")
-    reorder_parser.add_argument("input", help="輸入 PDF 檔案")
-    reorder_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
-    reorder_parser.add_argument("-p", "--pages", required=True, help="新的頁碼順序（例如：3,1,2,4-6）")
-
-    page_numbers_parser = subparsers.add_parser("page-numbers", help="添加頁碼")
-    page_numbers_parser.add_argument("input", help="輸入 PDF 檔案")
-    page_numbers_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
-    page_numbers_parser.add_argument("--position", default="bottom-right",
-                                      choices=["top-left", "top-center", "top-right",
-                                               "bottom-left", "bottom-center", "bottom-right"],
-                                      help="頁碼位置（預設 bottom-right）")
-    page_numbers_parser.add_argument("--format", default="{page}", help="頁碼格式（使用 {page} 表示頁碼，預設 '{page}'）")
-    page_numbers_parser.add_argument("--size", type=int, default=10, help="字體大小（預設 10）")
-    page_numbers_parser.add_argument("--offset", type=int, default=20, help="距離邊緣的偏移量（預設 20）")
-
-    ocr_parser = subparsers.add_parser("ocr", help="使用 OCR 識別 PDF 中的文字並匯出")
-    ocr_parser.add_argument("input", help="輸入 PDF 檔案")
-    ocr_parser.add_argument(
-        "--docx",
-        help="輸出為 Microsoft Word 格式 (.docx)",
+    diff_parser = subparsers.add_parser("diff", help="比較兩個 PDF 檔案的差異")
+    diff_parser.add_argument("pdf1", help="第一個 PDF 檔案")
+    diff_parser.add_argument("pdf2", help="第二個 PDF 檔案")
+    diff_parser.add_argument("-o", "--output", help="輸出 HTML 報告檔案路徑")
+    diff_parser.add_argument(
+        "--format",
+        choices=["summary", "html"],
+        default="summary",
+        help="輸出格式：summary（終端摘要）或 html（完整報告）",
     )
-    ocr_parser.add_argument(
-        "--odt",
-        help="輸出為 LibreOffice Writer 格式 (.odt)",
+
+    template_fill_parser = subparsers.add_parser("template-fill", help="填寫 DOCX 範本")
+    template_fill_parser.add_argument("template", help="DOCX 範本檔案")
+    template_fill_parser.add_argument("-o", "--output", required=True, help="輸出檔案路徑")
+    template_fill_parser.add_argument("-d", "--data", help="JSON 資料檔案路徑")
+    template_fill_parser.add_argument(
+        "-v",
+        "--value",
+        action="append",
+        dest="values",
+        metavar="KEY=VALUE",
+        help="直接指定欄位值，可重複使用（格式：key=value）",
     )
-    ocr_parser.add_argument(
-        "--txt",
-        help="輸出為純文字格式 (.txt)",
+    template_fill_parser.add_argument(
+        "--to-pdf",
+        action="store_true",
+        help="將輸出轉換為 PDF（需要 LibreOffice 或 docx2pdf）",
     )
-    ocr_parser.add_argument(
-        "--language",
-        default="eng",
-        help="OCR 語言代碼（預設 eng）。常用：eng, chi_sim, chi_tra, fra, deu, spa, jpn 等",
-    )
-    ocr_parser.add_argument(
-        "--dpi",
-        type=int,
-        default=300,
-        help="頁面渲染 DPI 解析度（預設 300）",
+
+    edit_metadata_parser = subparsers.add_parser("edit-metadata", help="編輯 PDF 元資料")
+    edit_metadata_parser.add_argument("input", help="輸入 PDF 檔案")
+    edit_metadata_parser.add_argument("-o", "--output", required=True, help="輸出 PDF 檔案")
+    edit_metadata_parser.add_argument("-d", "--data", help="JSON 資料檔案路徑")
+    edit_metadata_parser.add_argument(
+        "-v",
+        "--value",
+        action="append",
+        dest="values",
+        metavar="KEY=VALUE",
+        help="直接指定元資料值（格式：key=value，支援 title、author、subject、keywords、creator、producer）",
     )
 
     return parser
@@ -1946,36 +1512,30 @@ def main(argv: Sequence[str] | None = None) -> None:
                 print(
                     f"✓ 已填寫 {len(filled)} 個欄位，輸出檔案：{Path(args.output).resolve()}"
                 )
-        elif args.command == "extract-text":
-            extract_text(args.input, args.output, args.pages)
-        elif args.command == "encrypt":
-            encrypt_pdf(args.input, args.output, args.user_password, args.owner_password)
-        elif args.command == "decrypt":
-            decrypt_pdf(args.input, args.output, args.password)
-        elif args.command == "extract-images":
-            extract_images(args.input, args.directory, args.pages)
-        elif args.command == "pdf-to-images":
-            pdf_to_images(args.input, args.directory, args.pages, args.dpi, args.format)
-        elif args.command == "reorder":
-            reorder_pages(args.input, args.output, args.pages)
-        elif args.command == "page-numbers":
-            add_page_numbers(
-                args.input,
+        elif args.command == "diff":
+            compare_pdfs(
+                args.pdf1,
+                args.pdf2,
+                output_report=args.output,
+                format_type=args.format,
+            )
+        elif args.command == "template-fill":
+            payload: dict[str, Any] = {}
+            payload.update(_load_json_data(args.data))
+            payload.update(_parse_key_value_pairs(args.values))
+            fill_docx_template(
+                args.template,
                 args.output,
-                position=args.position,
-                format_str=args.format,
-                size=args.size,
-                offset=args.offset,
+                payload,
+                convert_to_pdf=args.to_pdf,
             )
-        elif args.command == "ocr":
-            ocr_pdf_to_text(
-                args.input,
-                output_docx=args.docx,
-                output_odt=args.odt,
-                output_txt=args.txt,
-                language=args.language,
-                dpi=args.dpi,
-            )
+        elif args.command == "edit-metadata":
+            metadata: dict[str, Any] = {}
+            metadata.update(_load_json_data(args.data))
+            metadata.update(_parse_key_value_pairs(args.values))
+            if not metadata:
+                raise ValueError("請提供至少一個元資料欄位（使用 --data 或 --value）。")
+            edit_pdf_metadata(args.input, args.output, metadata)
         else:  # pragma: no cover - subparser enforces valid commands
             parser.print_help()
     except FileNotFoundError as err:

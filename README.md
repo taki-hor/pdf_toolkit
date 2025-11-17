@@ -12,18 +12,13 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ Delete specific pages (reverse deletion to avoid index misalignment)
 - ✅ Rotate pages with cumulative angle support
 - ✅ Add custom text watermarks to all pages
-- ✅ Basic compression using pikepdf with linearization support
+- ✅ Advanced compression with aggressive image optimization
 - ✅ Query PDF file information and metadata
-- ✅ Graphical User Interface (GUI) for easy operation
+- ✅ **NEW** Edit PDF metadata (title, author, subject, keywords, etc.)
+- ✅ **NEW** Compare two PDFs and generate diff reports (HTML or summary)
+- ✅ **NEW** Fill DOCX templates with data and convert to PDF
 - ✅ Autofill interactive PDF forms from JSON or inline data
-- ✅ Extract text from PDF to text file
-- ✅ Encrypt PDF with password protection (AES-256)
-- ✅ Decrypt password-protected PDFs
-- ✅ Extract images from PDF pages
-- ✅ Convert PDF pages to image files (PNG/JPG)
-- ✅ Reorder PDF pages in custom sequence
-- ✅ Add page numbers with customizable positioning
-- ✅ OCR text extraction with export to Word, LibreOffice Writer, and text formats
+- ✅ Graphical User Interface (GUI) for easy operation
 
 ## Installation
 
@@ -82,13 +77,50 @@ python pdf_toolkit.py watermark input.pdf -t "DRAFT" --size 48 --alpha 0.2 --ang
 # Basic compression (with optional linearization)
 python pdf_toolkit.py optimize input.pdf -o optimized.pdf --linearize
 
-# Aggressive compression flag (currently falls back to basic compression with reminder)
+# Aggressive compression with image recompression (true aggressive mode)
 python pdf_toolkit.py optimize input.pdf -o optimized_aggressive.pdf --aggressive --dpi 150
 ```
 
 #### View PDF Information
 ```bash
 python pdf_toolkit.py info input.pdf
+```
+
+#### Edit PDF Metadata
+```bash
+# Edit metadata using command-line arguments
+python pdf_toolkit.py edit-metadata input.pdf -o output.pdf -v title="My Document" -v author="John Doe"
+
+# Edit metadata using JSON file
+python pdf_toolkit.py edit-metadata input.pdf -o output.pdf -d metadata.json
+
+# Supported metadata fields: title, author, subject, keywords, creator, producer
+```
+
+#### Compare Two PDFs (Diff)
+```bash
+# Show summary in terminal
+python pdf_toolkit.py diff document_v1.pdf document_v2.pdf
+
+# Generate HTML report
+python pdf_toolkit.py diff document_v1.pdf document_v2.pdf --format html -o diff_report.html
+
+# The diff tool detects:
+# - Added/deleted/modified lines
+# - Changes in dates, currency, percentages, IDs, emails, phone numbers
+# - Similarity percentage
+```
+
+#### Fill DOCX Templates
+```bash
+# Fill a DOCX template with placeholders like {{name}}, {{date}}, etc.
+python pdf_toolkit.py template-fill template.docx -o output.docx -v name="John Doe" -v date="2025-01-15"
+
+# Fill from JSON data file
+python pdf_toolkit.py template-fill template.docx -o output.docx -d data.json
+
+# Fill and convert to PDF (requires LibreOffice or docx2pdf)
+python pdf_toolkit.py template-fill template.docx -o output.pdf -d data.json --to-pdf
 ```
 
 #### Autofill PDF Form Fields
@@ -105,102 +137,6 @@ python pdf_toolkit.py autofill form.pdf -d data.json -v employee_id=EMP-001 -o f
 # Fill and flatten the result into static text
 python pdf_toolkit.py autofill form.pdf -d data.json -o filled_flat.pdf --flatten
 ```
-
-#### Extract Text from PDF
-```bash
-# Extract text from all pages to console
-python pdf_toolkit.py extract-text input.pdf
-
-# Extract text to a file
-python pdf_toolkit.py extract-text input.pdf -o output.txt
-
-# Extract text from specific pages
-python pdf_toolkit.py extract-text input.pdf -p "1-5,10" -o output.txt
-```
-
-#### Encrypt PDF
-```bash
-# Encrypt with user password
-python pdf_toolkit.py encrypt input.pdf -o encrypted.pdf -u mypassword
-
-# Encrypt with both user and owner passwords
-python pdf_toolkit.py encrypt input.pdf -o encrypted.pdf -u userpass --owner-password ownerpass
-```
-
-#### Decrypt PDF
-```bash
-python pdf_toolkit.py decrypt encrypted.pdf -o decrypted.pdf -p mypassword
-```
-
-#### Extract Images from PDF
-```bash
-# Extract all images
-python pdf_toolkit.py extract-images input.pdf -d output_images/
-
-# Extract images from specific pages
-python pdf_toolkit.py extract-images input.pdf -d output_images/ -p "1-3,5"
-```
-
-#### Convert PDF Pages to Images
-```bash
-# Convert all pages to PNG at 300 DPI
-python pdf_toolkit.py pdf-to-images input.pdf -d output_images/
-
-# Convert specific pages to JPG at custom DPI
-python pdf_toolkit.py pdf-to-images input.pdf -d output_images/ -p "1-5" --dpi 150 --format jpg
-```
-
-#### Reorder PDF Pages
-```bash
-# Reorder pages in custom sequence
-python pdf_toolkit.py reorder input.pdf -o reordered.pdf -p "3,1,2,4-6"
-
-# Reverse page order (for a 5-page document)
-python pdf_toolkit.py reorder input.pdf -o reversed.pdf -p "5,4,3,2,1"
-```
-
-#### Add Page Numbers
-```bash
-# Add page numbers at bottom-right (default)
-python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf
-
-# Add page numbers at top-center with custom format
-python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf --position top-center --format "Page {page}"
-
-# Customize size and offset
-python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf --size 12 --offset 30
-```
-
-#### OCR Text Extraction
-```bash
-# Extract text from scanned PDF and save to Microsoft Word format
-python pdf_toolkit.py ocr input.pdf --docx output.docx
-
-# Extract text and save to LibreOffice Writer format
-python pdf_toolkit.py ocr input.pdf --odt output.odt
-
-# Extract text and save to plain text format
-python pdf_toolkit.py ocr input.pdf --txt output.txt
-
-# Save to multiple formats at once
-python pdf_toolkit.py ocr input.pdf --docx output.docx --odt output.odt --txt output.txt
-
-# Specify OCR language (for non-English documents)
-python pdf_toolkit.py ocr input.pdf --docx output.docx --language chi_sim  # Simplified Chinese
-python pdf_toolkit.py ocr input.pdf --docx output.docx --language fra      # French
-
-# Adjust DPI for better quality (higher = better quality but slower)
-python pdf_toolkit.py ocr input.pdf --docx output.docx --dpi 400
-```
-
-**Note**: OCR requires Tesseract to be installed on your system:
-- **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
-- **macOS**: `brew install tesseract`
-- **Windows**: Download from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
-
-For additional language support, install language packs:
-- **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr-chi-sim` (for Chinese)
-- **macOS**: `brew install tesseract-lang`
 
 ### Graphical User Interface (GUI)
 
@@ -246,6 +182,13 @@ python quick_test.py
 ### GUI Requirements (Optional)
 - tkinter (usually included with Python)
 
+### DOCX to PDF Conversion (Optional)
+For converting DOCX templates to PDF, install one of:
+- **LibreOffice** (recommended): Install via your package manager
+  - Ubuntu/Debian: `sudo apt install libreoffice`
+  - macOS: `brew install libreoffice`
+  - Windows: Download from https://www.libreoffice.org/
+- **docx2pdf** (Python package): `pip install docx2pdf` (Windows only)
 
 ## Author
 
