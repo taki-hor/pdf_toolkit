@@ -20,6 +20,7 @@ class Sidebar(tk.Frame):
         ("info", "Info", "View PDF information"),
         ("template_fill", "Template Fill", "Fill DOCX/PDF templates"),
         ("pdf_diff", "PDF Diff", "Compare two PDF versions"),
+        ("ocr", "OCR Extract", "Extract text from scanned PDFs"),
         None,  # Separator
         ("delete", "Delete", "Delete specific pages"),
         ("rotate", "Rotate", "Rotate page orientation"),

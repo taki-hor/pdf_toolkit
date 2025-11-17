@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from pdf_toolkit import (
     merge_pdfs, split_pdf, delete_pages,
     rotate_pages, add_watermark, optimize_pdf,
-    get_pdf_info
+    get_pdf_info, ocr_pdf_to_text
 )
 
 
@@ -35,7 +35,7 @@ class PDFWorker(threading.Thread):
         Initialize PDF worker.
 
         Args:
-            operation: Operation name (merge, split, delete, rotate, watermark, optimize, info)
+            operation: Operation name (merge, split, delete, rotate, watermark, optimize, info, ocr)
             params: Parameters for the operation
             on_complete: Callback function on successful completion
             on_error: Callback function on error
@@ -115,6 +115,24 @@ class PDFWorker(threading.Thread):
             elif self.operation == "info":
                 info = get_pdf_info(self.params["input_pdf"])
                 self.result = info
+
+            elif self.operation == "ocr":
+                text = ocr_pdf_to_text(
+                    self.params["input_pdf"],
+                    output_docx=self.params.get("output_docx"),
+                    output_odt=self.params.get("output_odt"),
+                    output_txt=self.params.get("output_txt"),
+                    language=self.params.get("language", "eng"),
+                    dpi=self.params.get("dpi", 300)
+                )
+                self.result = {
+                    "text": text,
+                    "outputs": {
+                        "docx": self.params.get("output_docx"),
+                        "odt": self.params.get("output_odt"),
+                        "txt": self.params.get("output_txt")
+                    }
+                }
 
             else:
                 raise ValueError(f"Unknown operation: {self.operation}")
