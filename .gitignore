@@ -61,3 +61,7 @@ md/
 diagnostic_report.py
 test_gui_integration.py
 .config
+
+# Static directory (workaround for frontend package conflict)
+static/*
+!static/README.md

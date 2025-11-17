@@ -1,120 +1,74 @@
 # Troubleshooting Guide
 
-## Common Issues and Solutions
+## Static Directory Error
 
-### RuntimeError: Directory 'static/' does not exist
-
-**Error Message:**
+### Problem
+If you encounter an error like:
 ```
 RuntimeError: Directory 'static/' does not exist
-File "venv/lib/python3.8/site-packages/fitz/__init__.py", line 1, in <module>
-    from frontend import *
 ```
 
-**Cause:**
-This error occurs when a conflicting Python package called `frontend` is installed in your virtual environment. This package interferes with PyMuPDF's `fitz` module and tries to access a non-existent `static/` directory during import.
+This is caused by a conflicting `frontend` package in your virtual environment that has nothing to do with PDF processing.
 
-**Solution:**
+### Root Cause
+When `fitz` (PyMuPDF) is imported, a conflicting `frontend` package is being loaded. This package tries to mount a static files directory that doesn't exist in this project.
 
-#### Option 1: Automated Fix (Recommended)
+### Quick Fix
+A `static/` directory has been created in the project root to satisfy this requirement. The directory is ignored by git (except for the README).
 
-Run the provided fix script:
+### Proper Solution
+To completely resolve this issue, clean up your virtual environment:
 
-```bash
-# Activate your virtual environment first
-source venv/bin/activate  # On Linux/Mac
-# or
-venv\Scripts\activate  # On Windows
-
-# Run the fix script
-bash fix_environment.sh
-```
-
-#### Option 2: Manual Fix
-
-1. Activate your virtual environment:
+1. **Deactivate and remove the old venv:**
    ```bash
-   source venv/bin/activate
+   deactivate
+   rm -rf venv
    ```
 
-2. Check if the `frontend` package is installed:
+2. **Create a fresh virtual environment:**
    ```bash
-   pip list | grep frontend
+   python3 -m venv venv
+   source venv/bin/activate  # On Linux/Mac
+   # or
+   venv\Scripts\activate  # On Windows
    ```
 
-3. If found, uninstall it:
+3. **Install only the required packages:**
    ```bash
-   pip uninstall frontend
+   pip install --upgrade pip
+   pip install -r requirements.txt
    ```
 
-4. Reinstall PyMuPDF to ensure it's clean:
+4. **Verify the installation:**
    ```bash
-   pip uninstall PyMuPDF
-   pip install PyMuPDF>=1.23.0
+   pip list | grep -i pymupdf
+   # Should show: PyMuPDF and PyMuPDFb
+
+   pip list | grep -i frontend
+   # Should show nothing (no frontend package)
    ```
-
-5. Verify the installation:
-   ```bash
-   python -c "import fitz; print(fitz.version)"
-   ```
-
-#### Option 3: Quick Workaround (Temporary)
-
-If you need a quick fix and can't modify the virtual environment, create the missing directory:
-
-```bash
-mkdir -p venv/lib/python3.8/site-packages/frontend/static
-# Or for Python 3.9+, adjust the path accordingly
-```
-
-**Note:** This is only a workaround and doesn't fix the root cause. The proper solution is to remove the conflicting package.
 
 ### Prevention
+- Always use a clean virtual environment for each project
+- Only install packages from `requirements.txt`
+- Avoid installing unrelated packages in the project venv
 
-To avoid this issue in the future:
+## Other Common Issues
 
-1. Always use a clean virtual environment
-2. Install dependencies from `requirements.txt` or `requirements-gui.txt`:
-   ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-gui.txt  # For GUI features
-   ```
-3. Avoid installing unrelated packages in the project's virtual environment
-4. Use `pip list` periodically to check for unexpected packages
-
-### Other Common Issues
-
-#### Import Error: No module named 'fitz'
-
-**Solution:**
+### Import Errors
+If you get import errors, ensure all dependencies are installed:
 ```bash
-pip install PyMuPDF>=1.23.0
+pip install -r requirements.txt
 ```
 
-#### GUI Doesn't Start
-
-**Solution:**
-Ensure GUI dependencies are installed:
+### Permission Errors
+If you get permission errors with pip cache:
 ```bash
-pip install -r requirements-gui.txt
+pip install --no-cache-dir -r requirements.txt
 ```
 
-#### Permission Errors on Linux
-
-**Solution:**
-Make scripts executable:
+### GUI Not Starting
+Ensure you have tkinter installed (usually comes with Python):
 ```bash
-chmod +x pdf_toolkit_gui.py
-chmod +x fix_environment.sh
+sudo apt-get install python3-tk  # On Ubuntu/Debian
 ```
-
-## Getting Help
-
-If you encounter other issues not covered here, please:
-
-1. Check the README.md for setup instructions
-2. Verify your Python version (3.8+ required)
-3. Ensure all dependencies are installed
-4. Check the error message carefully for clues
-
-For persistent issues, consider creating a fresh virtual environment and reinstalling all dependencies.
