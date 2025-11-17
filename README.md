@@ -18,6 +18,7 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ **NEW** Compare two PDFs and generate diff reports (HTML or summary)
 - ✅ **NEW** Fill DOCX templates with data and convert to PDF
 - ✅ Autofill interactive PDF forms from JSON or inline data
+- ✅ **NEW** OCR text extraction from scanned PDFs with multi-format export (DOCX, ODT, TXT)
 - ✅ Graphical User Interface (GUI) for easy operation
 
 ## Installation
@@ -138,6 +139,37 @@ python pdf_toolkit.py autofill form.pdf -d data.json -v employee_id=EMP-001 -o f
 python pdf_toolkit.py autofill form.pdf -d data.json -o filled_flat.pdf --flatten
 ```
 
+#### OCR Text Extraction
+```bash
+# Extract text from scanned PDF and save to Microsoft Word format
+python pdf_toolkit.py ocr input.pdf --docx output.docx
+
+# Extract text and save to LibreOffice Writer format
+python pdf_toolkit.py ocr input.pdf --odt output.odt
+
+# Extract text and save to plain text format
+python pdf_toolkit.py ocr input.pdf --txt output.txt
+
+# Save to multiple formats at once
+python pdf_toolkit.py ocr input.pdf --docx output.docx --odt output.odt --txt output.txt
+
+# Specify OCR language (for non-English documents)
+python pdf_toolkit.py ocr input.pdf --docx output.docx --language chi_sim  # Simplified Chinese
+python pdf_toolkit.py ocr input.pdf --docx output.docx --language fra      # French
+
+# Adjust DPI for better quality (higher = better quality but slower)
+python pdf_toolkit.py ocr input.pdf --docx output.docx --dpi 400
+```
+
+**Note**: OCR requires Tesseract to be installed on your system:
+- **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
+- **macOS**: `brew install tesseract`
+- **Windows**: Download from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+
+For additional language support, install language packs:
+- **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr-chi-sim` (for Chinese)
+- **macOS**: `brew install tesseract-lang`
+
 ### Graphical User Interface (GUI)
 
 Launch the GUI application:
@@ -189,6 +221,16 @@ For converting DOCX templates to PDF, install one of:
   - macOS: `brew install libreoffice`
   - Windows: Download from https://www.libreoffice.org/
 - **docx2pdf** (Python package): `pip install docx2pdf` (Windows only)
+
+### OCR Requirements (Optional)
+For OCR text extraction from scanned PDFs:
+- **Tesseract OCR**: System-level installation required
+  - Ubuntu/Debian: `sudo apt-get install tesseract-ocr`
+  - macOS: `brew install tesseract`
+  - Windows: Download from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+- **pytesseract** (Python wrapper): Included in requirements.txt
+- **python-docx**: For DOCX export (included in requirements.txt)
+- **odfpy**: For ODT export (optional, may need manual installation: `pip install odfpy`)
 
 ## Author
 
