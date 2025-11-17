@@ -552,7 +552,18 @@ class OCRDialog(tk.Frame):
 
         # Show progress dialog
         progress = ProgressDialog(self, title="OCR Processing")
-        progress.update_status(f"Performing OCR on {self.page_count} page(s)...\nThis may take a while...")
+        progress.update_status(f"Starting OCR on {self.page_count} page(s)...", "Initializing...")
+        progress.set_progress(0)
+
+        # Progress callback for real-time updates
+        def on_progress(current, total, message):
+            """Update progress dialog with current page."""
+            percent = (current / total) * 100
+            progress.set_progress(percent)
+            progress.update_status(
+                f"OCR Processing: Page {current} of {total}",
+                f"Progress: {percent:.1f}% - This may take a while..."
+            )
 
         # Start worker thread
         def on_complete(result):
@@ -580,7 +591,8 @@ class OCRDialog(tk.Frame):
             operation="ocr",
             params=params,
             on_complete=on_complete,
-            on_error=on_error
+            on_error=on_error,
+            on_progress=on_progress
         )
         worker.start()
 
