@@ -4,7 +4,7 @@ Pillow>=10.0.0
 tqdm>=4.65.0
 click>=8.0.0
 python-docx>=0.8.11
-pdfplumber>=0.10.0
+pdfplumber>=0.10.0,<=0.11.5
 reportlab>=4.0.0
 pytesseract>=0.3.10
-odfpy>=1.4.1
+# odfpy>=1.4.1  # Commented out - not yet used in codebase, fails to build on some systems
