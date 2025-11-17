@@ -23,6 +23,7 @@ Basic PDF editing features — merge, split, delete, rotate etc.
 - ✅ Convert PDF pages to image files (PNG/JPG)
 - ✅ Reorder PDF pages in custom sequence
 - ✅ Add page numbers with customizable positioning
+- ✅ OCR text extraction with export to Word, LibreOffice Writer, and text formats
 
 ## Installation
 
@@ -169,6 +170,37 @@ python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf --position top-cent
 # Customize size and offset
 python pdf_toolkit.py page-numbers input.pdf -o numbered.pdf --size 12 --offset 30
 ```
+
+#### OCR Text Extraction
+```bash
+# Extract text from scanned PDF and save to Microsoft Word format
+python pdf_toolkit.py ocr input.pdf --docx output.docx
+
+# Extract text and save to LibreOffice Writer format
+python pdf_toolkit.py ocr input.pdf --odt output.odt
+
+# Extract text and save to plain text format
+python pdf_toolkit.py ocr input.pdf --txt output.txt
+
+# Save to multiple formats at once
+python pdf_toolkit.py ocr input.pdf --docx output.docx --odt output.odt --txt output.txt
+
+# Specify OCR language (for non-English documents)
+python pdf_toolkit.py ocr input.pdf --docx output.docx --language chi_sim  # Simplified Chinese
+python pdf_toolkit.py ocr input.pdf --docx output.docx --language fra      # French
+
+# Adjust DPI for better quality (higher = better quality but slower)
+python pdf_toolkit.py ocr input.pdf --docx output.docx --dpi 400
+```
+
+**Note**: OCR requires Tesseract to be installed on your system:
+- **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
+- **macOS**: `brew install tesseract`
+- **Windows**: Download from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+
+For additional language support, install language packs:
+- **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr-chi-sim` (for Chinese)
+- **macOS**: `brew install tesseract-lang`
 
 ### Graphical User Interface (GUI)
 

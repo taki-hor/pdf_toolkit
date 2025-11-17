@@ -134,5 +134,74 @@ def pdf_diff_command(old_pdf: Path, new_pdf: Path, html_report: Optional[Path]) 
         click.echo(f"HTML report saved to: {report_path}")
 
 
+@cli.command("ocr")
+@click.option(
+    "input_pdf",
+    "--input",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Path to the PDF file to perform OCR on.",
+)
+@click.option(
+    "output_docx",
+    "--docx",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Output path for Microsoft Word (.docx) format.",
+)
+@click.option(
+    "output_odt",
+    "--odt",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Output path for LibreOffice Writer (.odt) format.",
+)
+@click.option(
+    "output_txt",
+    "--txt",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Output path for plain text (.txt) format.",
+)
+@click.option(
+    "--language",
+    default="eng",
+    help="OCR language code (default: eng). Common codes: eng, chi_sim, chi_tra, fra, deu, spa, jpn.",
+)
+@click.option(
+    "--dpi",
+    type=int,
+    default=300,
+    help="DPI resolution for rendering pages (default: 300).",
+)
+def ocr_command(
+    input_pdf: Path,
+    output_docx: Optional[Path],
+    output_odt: Optional[Path],
+    output_txt: Optional[Path],
+    language: str,
+    dpi: int,
+) -> None:
+    """Extract text from PDF using OCR and save to Word, ODT, or text format."""
+    if not output_docx and not output_odt and not output_txt:
+        raise click.UsageError("At least one output format (--docx, --odt, or --txt) must be specified.")
+
+    try:
+        from pdf_toolkit import ocr_pdf_to_text
+
+        ocr_pdf_to_text(
+            str(input_pdf),
+            output_docx=str(output_docx) if output_docx else None,
+            output_odt=str(output_odt) if output_odt else None,
+            output_txt=str(output_txt) if output_txt else None,
+            language=language,
+            dpi=dpi,
+        )
+    except ImportError as exc:
+        missing_lib = "pytesseract" if "pytesseract" in str(exc).lower() else "odfpy" if "odf" in str(exc).lower() else "unknown"
+        raise click.ClickException(
+            f"Missing dependency '{missing_lib}'. Please install it to use OCR feature."
+        ) from exc
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 if __name__ == "__main__":
     cli()

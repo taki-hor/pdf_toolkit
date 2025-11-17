@@ -35,6 +35,31 @@ try:
 except ImportError:  # pragma: no cover - handled at runtime
     Image = None
 
+try:
+    import pytesseract  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - handled at runtime
+    pytesseract = None
+
+try:
+    from docx import Document  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - handled at runtime
+    Document = None
+
+try:
+    from odf.opendocument import OpenDocumentText  # type: ignore[import-not-found]
+    from odf.text import P  # type: ignore[import-not-found]
+    from odf import style  # type: ignore[import-not-found]
+    from odf.style import Style, TextProperties, ParagraphProperties  # type: ignore[import-not-found]
+    odf_available = True
+except ImportError:  # pragma: no cover - handled at runtime
+    odf_available = False
+    OpenDocumentText = None
+    P = None
+    style = None
+    Style = None
+    TextProperties = None
+    ParagraphProperties = None
+
 
 __version__ = "0.3.0"
 
@@ -1486,6 +1511,223 @@ def optimize_pdf(
         print("⚠ 簡化版進階壓縮已執行基礎壓縮，圖片重採樣功能待後續補強。")
 
 
+# ============= OCR 文字識別區 =============
+
+def extract_text_from_pdf_ocr(
+    input_pdf: str,
+    language: str = "eng",
+    dpi: int = 300,
+) -> str:
+    """
+    Extract text from a PDF using OCR (Optical Character Recognition).
+
+    This function is useful for scanned PDFs or image-based PDFs where text
+    cannot be extracted directly. It converts each page to an image and uses
+    Tesseract OCR to recognize the text.
+
+    Args:
+        input_pdf: Source PDF path.
+        language: OCR language code (default "eng" for English).
+                  Common codes: eng, chi_sim, chi_tra, fra, deu, spa, jpn, etc.
+        dpi: DPI resolution for rendering pages (default 300).
+
+    Returns:
+        Extracted text content from all pages.
+
+    Raises:
+        ImportError: If required libraries (PyMuPDF, Pillow, pytesseract) are not installed.
+        FileNotFoundError: If the input PDF does not exist or Tesseract is not installed.
+        PermissionError: If the input PDF is encrypted.
+        ValueError: If the PDF cannot be read.
+    """
+    if fitz is None:
+        raise ImportError("PyMuPDF (fitz) 尚未安裝，請先執行 'pip install PyMuPDF>=1.23.0'。")
+    if Image is None:
+        raise ImportError("Pillow 尚未安裝，請先執行 'pip install Pillow>=10.0.0'。")
+    if pytesseract is None:
+        raise ImportError("pytesseract 尚未安裝，請先執行 'pip install pytesseract>=0.3.10'。")
+
+    try:
+        document = safe_open_pdf(input_pdf)
+    except PermissionError as exc:
+        raise PermissionError(f"檔案已加密，無法進行 OCR：{input_pdf}") from exc
+
+    try:
+        total_pages = document.page_count
+        print(f"正在進行 OCR 文字識別（共 {total_pages} 頁，語言：{language}）...")
+
+        extracted_text = []
+
+        for page_index in tqdm(range(total_pages), desc="OCR 識別", unit="頁"):
+            page = document[page_index]
+
+            # Render page as image with specified DPI
+            matrix = fitz.Matrix(dpi / 72, dpi / 72)
+            pix = page.get_pixmap(matrix=matrix)
+
+            # Convert PyMuPDF pixmap to PIL Image
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+
+            # Perform OCR on the image
+            try:
+                page_text = pytesseract.image_to_string(img, lang=language)
+                if page_text.strip():
+                    extracted_text.append(f"--- 第 {page_index + 1} 頁 ---\n")
+                    extracted_text.append(page_text)
+                    extracted_text.append("\n")
+            except pytesseract.TesseractNotFoundError as exc:
+                raise FileNotFoundError(
+                    "Tesseract OCR 引擎未安裝。請先安裝 Tesseract：\n"
+                    "  - Ubuntu/Debian: sudo apt-get install tesseract-ocr\n"
+                    "  - macOS: brew install tesseract\n"
+                    "  - Windows: 從 https://github.com/UB-Mannheim/tesseract/wiki 下載安裝"
+                ) from exc
+    finally:
+        document.close()
+
+    result = "".join(extracted_text)
+    print(f"✓ OCR 識別完成，共擷取 {len(result)} 個字元")
+    return result
+
+
+def save_text_to_docx(text: str, output_path: str) -> None:
+    """
+    Save extracted text to a Microsoft Word (.docx) document.
+
+    Args:
+        text: Text content to save.
+        output_path: Destination .docx file path.
+
+    Raises:
+        ImportError: If python-docx is not installed.
+        OSError: If the output file cannot be written.
+    """
+    if Document is None:
+        raise ImportError(
+            "python-docx 尚未安裝，請先執行 'pip install python-docx>=0.8.11'。"
+        )
+
+    doc = Document()
+    doc.add_heading("OCR 擷取文字", level=1)
+
+    # Split text into paragraphs and add to document
+    paragraphs = text.split("\n")
+    for para in paragraphs:
+        if para.strip():
+            doc.add_paragraph(para)
+
+    try:
+        output_file = Path(output_path)
+        output_parent = output_file.parent
+        if output_parent and not output_parent.exists():
+            output_parent.mkdir(parents=True, exist_ok=True)
+        doc.save(output_path)
+    except OSError as exc:
+        raise OSError(f"無法寫入輸出檔案：{output_path}") from exc
+
+    print(f"✓ 已儲存為 Microsoft Word 格式：{output_path}")
+
+
+def save_text_to_odt(text: str, output_path: str) -> None:
+    """
+    Save extracted text to a LibreOffice Writer (.odt) document.
+
+    Args:
+        text: Text content to save.
+        output_path: Destination .odt file path.
+
+    Raises:
+        ImportError: If odfpy is not installed.
+        OSError: If the output file cannot be written.
+    """
+    if not odf_available:
+        raise ImportError(
+            "odfpy 尚未安裝，請先執行 'pip install odfpy>=1.4.1'。"
+        )
+
+    doc = OpenDocumentText()
+
+    # Add a title
+    title_style = Style(name="Title", family="paragraph")
+    title_style.addElement(TextProperties(fontsize="18pt", fontweight="bold"))
+    doc.styles.addElement(title_style)
+
+    title = P(text="OCR 擷取文字", stylename=title_style)
+    doc.text.addElement(title)
+
+    # Add paragraphs
+    paragraphs = text.split("\n")
+    for para_text in paragraphs:
+        if para_text.strip():
+            para = P(text=para_text)
+            doc.text.addElement(para)
+
+    try:
+        output_file = Path(output_path)
+        output_parent = output_file.parent
+        if output_parent and not output_parent.exists():
+            output_parent.mkdir(parents=True, exist_ok=True)
+        doc.save(output_path)
+    except OSError as exc:
+        raise OSError(f"無法寫入輸出檔案：{output_path}") from exc
+
+    print(f"✓ 已儲存為 LibreOffice Writer 格式：{output_path}")
+
+
+def ocr_pdf_to_text(
+    input_pdf: str,
+    output_docx: str | None = None,
+    output_odt: str | None = None,
+    output_txt: str | None = None,
+    language: str = "eng",
+    dpi: int = 300,
+) -> str:
+    """
+    Perform OCR on a PDF and save the extracted text to various formats.
+
+    Args:
+        input_pdf: Source PDF path.
+        output_docx: Optional path to save as Microsoft Word (.docx).
+        output_odt: Optional path to save as LibreOffice Writer (.odt).
+        output_txt: Optional path to save as plain text (.txt).
+        language: OCR language code (default "eng").
+        dpi: DPI resolution for rendering pages (default 300).
+
+    Returns:
+        Extracted text content.
+
+    Raises:
+        ValueError: If no output format is specified.
+        Same exceptions as extract_text_from_pdf_ocr, save_text_to_docx, and save_text_to_odt.
+    """
+    if not output_docx and not output_odt and not output_txt:
+        raise ValueError("請至少指定一個輸出格式（--docx、--odt 或 --txt）。")
+
+    # Extract text using OCR
+    text = extract_text_from_pdf_ocr(input_pdf, language=language, dpi=dpi)
+
+    # Save to requested formats
+    if output_docx:
+        save_text_to_docx(text, output_docx)
+
+    if output_odt:
+        save_text_to_odt(text, output_odt)
+
+    if output_txt:
+        try:
+            output_file = Path(output_txt)
+            output_parent = output_file.parent
+            if output_parent and not output_parent.exists():
+                output_parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(text, encoding="utf-8")
+            print(f"✓ 已儲存為純文字格式：{output_txt}")
+        except OSError as exc:
+            raise OSError(f"無法寫入輸出檔案：{output_txt}") from exc
+
+    return text
+
+
 def build_parser() -> "argparse.ArgumentParser":
     """Construct the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -1609,6 +1851,32 @@ def build_parser() -> "argparse.ArgumentParser":
     page_numbers_parser.add_argument("--size", type=int, default=10, help="字體大小（預設 10）")
     page_numbers_parser.add_argument("--offset", type=int, default=20, help="距離邊緣的偏移量（預設 20）")
 
+    ocr_parser = subparsers.add_parser("ocr", help="使用 OCR 識別 PDF 中的文字並匯出")
+    ocr_parser.add_argument("input", help="輸入 PDF 檔案")
+    ocr_parser.add_argument(
+        "--docx",
+        help="輸出為 Microsoft Word 格式 (.docx)",
+    )
+    ocr_parser.add_argument(
+        "--odt",
+        help="輸出為 LibreOffice Writer 格式 (.odt)",
+    )
+    ocr_parser.add_argument(
+        "--txt",
+        help="輸出為純文字格式 (.txt)",
+    )
+    ocr_parser.add_argument(
+        "--language",
+        default="eng",
+        help="OCR 語言代碼（預設 eng）。常用：eng, chi_sim, chi_tra, fra, deu, spa, jpn 等",
+    )
+    ocr_parser.add_argument(
+        "--dpi",
+        type=int,
+        default=300,
+        help="頁面渲染 DPI 解析度（預設 300）",
+    )
+
     return parser
 
 
@@ -1698,6 +1966,15 @@ def main(argv: Sequence[str] | None = None) -> None:
                 format_str=args.format,
                 size=args.size,
                 offset=args.offset,
+            )
+        elif args.command == "ocr":
+            ocr_pdf_to_text(
+                args.input,
+                output_docx=args.docx,
+                output_odt=args.odt,
+                output_txt=args.txt,
+                language=args.language,
+                dpi=args.dpi,
             )
         else:  # pragma: no cover - subparser enforces valid commands
             parser.print_help()
