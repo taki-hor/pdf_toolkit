@@ -1354,6 +1354,7 @@ def extract_text_from_pdf_ocr(
     input_pdf: str,
     language: str = "eng",
     dpi: int = 300,
+    progress_callback=None,
 ) -> str:
     """
     Extract text from a PDF using OCR (Optical Character Recognition).
@@ -1367,6 +1368,7 @@ def extract_text_from_pdf_ocr(
         language: OCR language code (default "eng" for English).
                   Common codes: eng, chi_sim, chi_tra, fra, deu, spa, jpn, etc.
         dpi: DPI resolution for rendering pages (default 300).
+        progress_callback: Optional callback function(current, total, message) for progress updates.
 
     Returns:
         Extracted text content from all pages.
@@ -1395,7 +1397,16 @@ def extract_text_from_pdf_ocr(
 
         extracted_text = []
 
-        for page_index in tqdm(range(total_pages), desc="OCR 識別", unit="頁"):
+        # Use tqdm only if no progress callback is provided (for CLI mode)
+        page_iterator = range(total_pages)
+        if progress_callback is None:
+            page_iterator = tqdm(page_iterator, desc="OCR 識別", unit="頁")
+
+        for page_index in page_iterator:
+            # Call progress callback if provided (for GUI mode)
+            if progress_callback:
+                progress_callback(page_index + 1, total_pages, f"Processing page {page_index + 1} of {total_pages}")
+
             page = document[page_index]
 
             # Render page as image with specified DPI
@@ -1519,6 +1530,7 @@ def ocr_pdf_to_text(
     output_txt: str | None = None,
     language: str = "eng",
     dpi: int = 300,
+    progress_callback=None,
 ) -> str:
     """
     Perform OCR on a PDF and save the extracted text to various formats.
@@ -1530,6 +1542,7 @@ def ocr_pdf_to_text(
         output_txt: Optional path to save as plain text (.txt).
         language: OCR language code (default "eng").
         dpi: DPI resolution for rendering pages (default 300).
+        progress_callback: Optional callback function(current, total, message) for progress updates.
 
     Returns:
         Extracted text content.
@@ -1542,7 +1555,7 @@ def ocr_pdf_to_text(
         raise ValueError("請至少指定一個輸出格式（--docx、--odt 或 --txt）。")
 
     # Extract text using OCR
-    text = extract_text_from_pdf_ocr(input_pdf, language=language, dpi=dpi)
+    text = extract_text_from_pdf_ocr(input_pdf, language=language, dpi=dpi, progress_callback=progress_callback)
 
     # Save to requested formats
     if output_docx:

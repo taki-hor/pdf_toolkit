@@ -123,7 +123,8 @@ class PDFWorker(threading.Thread):
                     output_odt=self.params.get("output_odt"),
                     output_txt=self.params.get("output_txt"),
                     language=self.params.get("language", "eng"),
-                    dpi=self.params.get("dpi", 300)
+                    dpi=self.params.get("dpi", 300),
+                    progress_callback=self.on_progress
                 )
                 self.result = {
                     "text": text,
