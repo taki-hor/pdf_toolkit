@@ -240,6 +240,11 @@ class MainWindow(tk.Tk):
             self.current_dialog = OptimizeDialog(self.workspace, self)
             self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
+        elif feature == "ocr":
+            from gui.dialogs.ocr_dialog import OCRDialog
+            self.current_dialog = OCRDialog(self.workspace, self)
+            self.current_dialog.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
     def _show_coming_soon(self, feature: str) -> None:
         """Show coming soon message for unimplemented features."""
         coming_soon_frame = tk.Frame(self.workspace, bg=COLORS["bg_secondary"])
