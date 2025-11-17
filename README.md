@@ -31,6 +31,27 @@ pip install -r requirements.txt
 pip install -r requirements-gui.txt
 ```
 
+## Troubleshooting
+
+If you encounter issues during installation or runtime, particularly the error:
+```
+RuntimeError: Directory 'static/' does not exist
+```
+
+This indicates a conflicting Python package in your virtual environment. Use one of the provided fix scripts:
+
+**Linux/Mac:**
+```bash
+bash fix_environment.sh
+```
+
+**Windows (or cross-platform):**
+```bash
+python fix_environment.py
+```
+
+For detailed troubleshooting steps and other common issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 ## Usage
 
 ### Command Line Interface (CLI)
